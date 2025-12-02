@@ -5,6 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title> Direksiyon dersi ders  programı </title>
   <link rel="stylesheet" href="style.css">
+ <!-- Firebase CDN (EN ÜSTTE OLMALI) -->
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
 
   <!-- PDF ve Excel kütüphaneleri -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -23,19 +26,27 @@
   <!-- Öğrenci Paneli -->
   <section id="ogrenciPanel" class="panel">
     <div id="ogrenciLoginDiv">
-      <h2>Öğrenci Girişi</h2>
-      <form id="ogrenciLoginForm">
-        <div class="form-group">
-          <label>Ad Soyad:</label>
-          <input type="text" id="loginAdSoyad" required placeholder="Ad Soyad">
-        </div>
-        <div class="form-group">
-          <label>Telefon:</label>
-          <input type="tel" id="loginTelefon" required placeholder="05XXXXXXXXX">
-        </div>
-        <button type="submit" class="btn">Giriş Yap</button>
-      </form>
+  <h2>Öğrenci Girişi</h2>
+  <form id="ogrenciLoginForm">
+    <div class="form-group">
+      <label>Ad Soyad:</label>
+      <input type="text" id="loginAdSoyad" required placeholder="Ad Soyad">
     </div>
+    <div class="form-group">
+      <label>Telefon:</label>
+      <input type="tel" id="loginTelefon" required placeholder="05XXXXXXXXX">
+    </div>
+    
+    <!-- YENİ: Beni Hatırla -->
+    <div class="form-group" style="display:flex; align-items:center; gap:8px;">
+      <input type="checkbox" id="beniHatirla" style="width:auto; margin:0;">
+      <label for="beniHatirla" style="margin:0; cursor:pointer;">Beni Hatırla</label>
+    </div>
+    <!-- YENİ BÖLÜM SONU -->
+    
+    <button type="submit" class="btn">Giriş Yap</button>
+  </form>
+</div>
 
 
     <div id="ogrenciFormDiv" style="display:none;">
@@ -80,9 +91,9 @@
 <!-- Boş Saatleri Göster Butonu -->
 <div style="margin-top: 15px;">
   <button type="button" id="bosSaatBtn" class="btn">Boş Saatleri Göster/Gizle</button>
-  <ul id="ogrenciBosSaatListe" style="margin-top:10px; display:none; list-style: none; padding-left: 0;"></ul>
+  <!-- Görsel tablo için -->
+  <div id="ogrenciBosSaatTablo" style="margin-top: 10px; display: none;"></div>
 </div>
-
 
       <h3>Kaydedilen Saatler</h3>
       <div class="table-responsive">
@@ -102,9 +113,15 @@
     </div>
   </section>
 
- <!-- Hoca Paneli -->
-  <section id="hocaPanel" class="panel">
-    <h2>Hoca Girişi</h2>
+<!-- Hoca Paneli -->
+<section id="hocaPanel" class="panel">
+    
+  <div id="hocaCikisDiv" style="display:none; text-align:right; margin-bottom:15px;">
+    <button onclick="hocaCikisYap()" class="btn" style="background-color:#6c757d;">
+      🚪 Çıkış Yap
+    </button>
+  </div>
+  <h2>Hoca Girişi</h2>
     <form id="hocaLoginForm">
       <div class="form-group">
         <label>Şifre:</label>
@@ -153,7 +170,7 @@
         <option>Pazartesi</option>
         <option>Salı</option>
         <option>Çarşamba</option>
-        <option>Perşembe</option>
+        <option>Perşembe</option> 
         <option>Cuma</option>
         <option>Cumartesi</option>
       </select>
@@ -199,10 +216,11 @@
         <tbody id="tabloVeri"></tbody>
       </table>
 
-      <div class="indirme-btn" style="margin-top:10px;">
-        <button id="pdfBtn" class="btn">PDF Olarak İndir</button>
-        <button id="excelBtn" class="btn">Excel Olarak İndir</button>
-      </div>
+<div class="indirme-btn" style="margin-top:10px; display:flex; gap:10px; flex-wrap:wrap;">
+  <button id="pdfBtn" class="btn">📄 PDF İndir</button>
+  <button id="excelBtn" class="btn">📊 Excel İndir</button>
+  <button onclick="tumKayitlariSil()" class="btn" style="background-color:#dc3545;">🗑️ Tüm Kayıtları Sil</button>
+</div>
     </div>
   </section>
 
