@@ -2,65 +2,109 @@
 <html lang="tr">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title> Direksiyon dersi ders  programı </title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  
+  <!-- PWA Özellikleri -->
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="theme-color" content="#667eea">
+  
+  <!-- SEO -->
+  <meta name="description" content="Direksiyon Dersi Randevu Sistemi">
+  <meta name="keywords" content="direksiyon dersi, randevu, ehliyet">
+  
+  <title>Direksiyon Dersi Programı</title>
   <link rel="stylesheet" href="style.css">
- <!-- Firebase CDN (EN ÜSTTE OLMALI) -->
+  
+  <!-- Firebase CDN -->
   <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
 
-  <!-- PDF ve Excel kütüphaneleri -->
+  <!-- PDF ve Excel Kütüphaneleri -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 </head>
 <body>
   <header>
-    <h1>Direksiyon dersi ders  programı</h1>
+    <h1>🚗 Direksiyon Dersi Programı</h1>
     <div class="menu">
-      <button id="ogrenciBtn" class="menu-btn active">Öğrenci</button>
-      <button id="hocaBtn" class="menu-btn">Hoca</button>
+      <button id="ogrenciBtn" class="menu-btn active">👨‍🎓 Öğrenci</button>
+      <button id="hocaBtn" class="menu-btn">👨‍🏫 Hoca</button>
     </div>
   </header>
 
-  <!-- Öğrenci Paneli -->
+  <!-- ==================== ÖĞRENCİ PANELİ ==================== -->
   <section id="ogrenciPanel" class="panel">
+    <!-- Öğrenci Giriş -->
     <div id="ogrenciLoginDiv">
-  <h2>Öğrenci Girişi</h2>
-  <form id="ogrenciLoginForm">
-    <div class="form-group">
-      <label>Ad Soyad:</label>
-      <input type="text" id="loginAdSoyad" required placeholder="Ad Soyad">
+      <h2>Öğrenci Girişi</h2>
+      <form id="ogrenciLoginForm">
+        <div class="form-group">
+          <label>Ad Soyad:</label>
+          <input 
+            type="text" 
+            id="loginAdSoyad" 
+            required 
+            placeholder="Ad Soyad (min. 3 karakter)"
+            minlength="3"
+            maxlength="100"
+            pattern="[a-zA-ZğüşıöçĞÜŞİÖÇ\s]+"
+            title="Ad en az 3 karakter olmalı ve sadece harf içermelidir"
+          >
+          <small style="color:#666; font-size:0.85rem; display:block; margin-top:4px;">
+            ✓ En az 3 karakter • Sadece harf
+          </small>
+        </div>
+        
+        <div class="form-group">
+          <label>Telefon:</label>
+          <input 
+            type="tel" 
+            id="loginTelefon" 
+            required 
+            placeholder="05XXXXXXXXX"
+            pattern="05[0-9]{9}"
+            maxlength="11"
+            inputmode="numeric"
+          >
+          <small style="color:#666; font-size:0.85rem; display:block; margin-top:4px;">
+            ✓ 05 ile başlamalı • 11 haneli
+          </small>
+        </div>
+        
+        <!-- Beni Hatırla -->
+        <div class="form-group" style="display:flex; align-items:center; gap:8px; margin-top:10px;">
+          <input type="checkbox" id="beniHatirla" style="width:auto; margin:0;">
+          <label for="beniHatirla" style="margin:0; cursor:pointer;">🔒 Beni Hatırla</label>
+        </div>
+        
+        <button type="submit" class="btn">Giriş Yap</button>
+        
+        <!-- Farklı Hesap Butonu -->
+        <button type="button" id="farkliHesapBtn" class="btn" style="background-color:#6c757d;">
+          🔄 Farklı Hesap
+        </button>
+      </form>
     </div>
-    <div class="form-group">
-      <label>Telefon:</label>
-      <input type="tel" id="loginTelefon" required placeholder="05XXXXXXXXX">
-    </div>
-    
-    <!-- YENİ: Beni Hatırla -->
-    <div class="form-group" style="display:flex; align-items:center; gap:8px;">
-      <input type="checkbox" id="beniHatirla" style="width:auto; margin:0;">
-      <label for="beniHatirla" style="margin:0; cursor:pointer;">Beni Hatırla</label>
-    </div>
-    <!-- YENİ BÖLÜM SONU -->
-    
-    <button type="submit" class="btn">Giriş Yap</button>
-  </form>
-</div>
 
-
+    <!-- Öğrenci Form -->
     <div id="ogrenciFormDiv" style="display:none;">
       <h2>Uygun Saatlerini Seç</h2>
       <form id="formUygunluk">
         <input type="hidden" id="duzenleIndex" value="-1">
+        
         <div class="form-group">
           <label>Ad Soyad:</label>
           <input type="text" id="ogrenciAdi" readonly>
         </div>
+        
         <div class="form-group">
           <label>Telefon:</label>
           <input type="tel" id="telefon" readonly>
         </div>
+        
         <div class="form-group">
           <label>Uygun Gün:</label>
           <select id="gun">
@@ -72,6 +116,7 @@
             <option>Cumartesi</option>
           </select>
         </div>
+        
         <div class="form-group">
           <label>Uygun Saat:</label>
           <select id="saat" required>
@@ -86,15 +131,17 @@
             <option value="17:00">17:00 - 17:50</option>
           </select>
         </div>
-        <button type="submit" class="btn">Kaydet</button>
+        
+        <button type="submit" class="btn">💾 Kaydet</button>
       </form>
-<!-- Boş Saatleri Göster Butonu -->
-<div style="margin-top: 15px;">
-  <button type="button" id="bosSaatBtn" class="btn">Boş Saatleri Göster/Gizle</button>
-  <!-- Görsel tablo için -->
-  <div id="ogrenciBosSaatTablo" style="margin-top: 10px; display: none;"></div>
-</div>
 
+      <!-- Boş Saatleri Göster -->
+      <div style="margin-top: 15px;">
+        <button type="button" id="bosSaatBtn" class="btn">📅 Boş Saatleri Göster/Gizle</button>
+        <div id="ogrenciBosSaatTablo" style="margin-top: 10px; display: none;"></div>
+      </div>
+
+      <!-- Kaydedilen Saatler -->
       <h3>Kaydedilen Saatler</h3>
       <div class="table-responsive">
         <table id="ogrenciTablo">
@@ -113,114 +160,135 @@
     </div>
   </section>
 
-<!-- Hoca Paneli -->
-<section id="hocaPanel" class="panel">
+  <!-- ==================== HOCA PANELİ ==================== -->
+  <section id="hocaPanel" class="panel">
+    <!-- Çıkış Butonu -->
+    <div id="hocaCikisDiv" style="display:none; text-align:right; margin-bottom:15px;">
+      <button onclick="hocaCikisYap()" class="btn" style="background-color:#6c757d;">
+        🚪 Çıkış Yap
+      </button>
+    </div>
     
-  <div id="hocaCikisDiv" style="display:none; text-align:right; margin-bottom:15px;">
-    <button onclick="hocaCikisYap()" class="btn" style="background-color:#6c757d;">
-      🚪 Çıkış Yap
-    </button>
-  </div>
-  <h2>Hoca Girişi</h2>
+    <!-- Hoca Giriş -->
+    <h2>Hoca Girişi</h2>
     <form id="hocaLoginForm">
       <div class="form-group">
         <label>Şifre:</label>
-        <input type="password" id="sifre" required placeholder="Şifre">
+        <input type="password" id="sifre" required placeholder="Şifrenizi girin">
       </div>
-      <button type="submit" class="btn">Giriş Yap</button>
+      <button type="submit" class="btn">🔐 Giriş Yap</button>
     </form>
 
-
     <!-- Hoca Tablosu ve İstatistikler -->
-    <div id="hocaTabloDiv" class="table-responsive" style="display:none; margin-top:20px;">
-      <h3>Öğrenci Programı</h3>
-      <div id="istatistikler" style="margin-bottom:15px;">
-        <span id="toplamOgrenci">📆 Toplam Öğrenci: 0</span> |
-        <span id="enYogunGun">🧩 En Yoğun Gün: -</span> |
+    <div id="hocaTabloDiv" style="display:none; margin-top:20px;">
+      <h3>📊 Öğrenci Programı</h3>
+      
+      <!-- İstatistikler -->
+      <div id="istatistikler">
+        <span id="toplamOgrenci">📆 Toplam Öğrenci: 0</span>
+        <span id="enYogunGun">🧩 En Yoğun Gün: -</span>
         <span id="bosSaatler">⏰ Boş Saatler: 0</span>
       </div>
 
-      <div style="margin-bottom:10px;">
-        <input type="text" id="searchInput" placeholder="Gün, Saat, Öğrenci veya Telefon ara..." style="width:100%; padding:8px; border-radius:8px; border:1px solid #ccc;">
+      <!-- İndirme Butonları -->
+      <div class="butonlar">
+        <button id="pdfBtn" class="btn">📄 PDF İndir</button>
+        <button id="excelBtn" class="btn">📊 Excel İndir</button>
+        <button onclick="tumKayitlariSil()" class="btn" style="background-color:#dc3545;">
+          🗑️ Tüm Kayıtları Sil
+        </button>
       </div>
-<!-- Mevcut boş saat listesi -->
 
+      <!-- Arama -->
+      <div style="margin-bottom:10px;">
+        <input 
+          type="text" 
+          id="searchInput" 
+          placeholder="🔍 Gün, Saat, Öğrenci veya Telefon ara..."
+        >
+      </div>
 
-<!-- Yeni görsel tablo için -->
-<div id="hocaBosSaatTablo" style="margin-top: 10px; display: none;"></div>
-<!-- HOCA DÜZENLEME FORMU -->
-<div id="hocaDuzenleFormDiv" style="display:none; margin-top:20px; border:2px solid #4CAF50; padding:20px; border-radius:8px; background-color:#f9f9f9;">
-  <h3 style="color:#4CAF50; margin-bottom:15px;">📝 Randevu Düzenle</h3>
-  <form id="hocaDuzenleForm">
-    <input type="hidden" id="hocaDuzenleIndex" value="-1">
-    
-    <div class="form-group">
-      <label>Öğrenci Adı:</label>
-      <input type="text" id="hocaDuzenleOgrenci" readonly style="background-color:#e9e9e9; cursor:not-allowed;">
-    </div>
-    
-    <div class="form-group">
-      <label>Telefon:</label>
-      <input type="text" id="hocaDuzenleTelefon" readonly style="background-color:#e9e9e9; cursor:not-allowed;">
-    </div>
-    
-    <div class="form-group">
-      <label>Yeni Gün:</label>
-      <select id="hocaDuzenleGun" required>
-        <option>Pazartesi</option>
-        <option>Salı</option>
-        <option>Çarşamba</option>
-        <option>Perşembe</option> 
-        <option>Cuma</option>
-        <option>Cumartesi</option>
-      </select>
-    </div>
-    
-    <div class="form-group">
-      <label>Yeni Saat:</label>
-      <select id="hocaDuzenleSaat" required>
-        <option value="08:00">08:00 - 08:50</option>
-        <option value="09:00">09:00 - 09:50</option>
-        <option value="10:00">10:00 - 10:50</option>
-        <option value="11:00">11:00 - 11:50</option>
-        <option value="13:00">13:00 - 13:50</option>
-        <option value="14:00">14:00 - 14:50</option>
-        <option value="15:00">15:00 - 15:50</option>
-        <option value="16:00">16:00 - 16:50</option>
-        <option value="17:00">17:00 - 17:50</option>
-      </select>
-    </div>
-    
-    <div style="display:flex; gap:10px; margin-top:15px;">
-      <button type="submit" class="btn" style="background-color:#4CAF50;">✅ Güncelle</button>
-      <button type="button" class="btn" onclick="document.getElementById('hocaDuzenleFormDiv').style.display='none'" style="background-color:#f44336;"> İptal</button>
-    </div>
-  </form>
-</div>
-<!-- HOCA DÜZENLEME FORMU SONU -->
-    <!-- Boş Saatleri Göster -->
-    <div id="hocaBosSaatDetay" style="margin-top:10px;">
-      <button id="hocaBosSaatBtn" class="btn">Boş Saatleri Göster/Gizle</button>
-      <ul id="hocaBosSaatListe" style="list-style:none; padding-left:0; display:none; margin-top:10px;"></ul>
-    </div>
-      <table id="tablo">
-        <thead>
-          <tr>
-            <th>Gün</th>
-            <th>Saat</th>
-            <th>Öğrenci</th>
-            <th>Telefon</th>
-            <th>İşlem</th>
-          </tr>
-        </thead>
-        <tbody id="tabloVeri"></tbody>
-      </table>
+      <!-- Boş Saatleri Göster -->
+      <div id="hocaBosSaatDetay" style="margin-top:10px;">
+        <button id="hocaBosSaatBtn" class="btn">📅 Boş Saatleri Göster/Gizle</button>
+        <ul id="hocaBosSaatListe" style="list-style:none; padding-left:0; display:none; margin-top:10px;"></ul>
+        <div id="hocaBosSaatTablo" style="margin-top: 10px; display: none;"></div>
+      </div>
 
-<div class="indirme-btn" style="margin-top:10px; display:flex; gap:10px; flex-wrap:wrap;">
-  <button id="pdfBtn" class="btn">📄 PDF İndir</button>
-  <button id="excelBtn" class="btn">📊 Excel İndir</button>
-  <button onclick="tumKayitlariSil()" class="btn" style="background-color:#dc3545;">🗑️ Tüm Kayıtları Sil</button>
-</div>
+      <!-- Hoca Düzenleme Formu -->
+      <div id="hocaDuzenleFormDiv" style="display:none; margin-top:20px;">
+        <h3>📝 Randevu Düzenle</h3>
+        <form id="hocaDuzenleForm">
+          <input type="hidden" id="hocaDuzenleIndex" value="-1">
+          
+          <div class="form-group">
+            <label>Öğrenci Adı:</label>
+            <input type="text" id="hocaDuzenleOgrenci" readonly>
+          </div>
+          
+          <div class="form-group">
+            <label>Telefon:</label>
+            <input type="text" id="hocaDuzenleTelefon" readonly>
+          </div>
+          
+          <div class="form-group">
+            <label>Yeni Gün:</label>
+            <select id="hocaDuzenleGun" required>
+              <option>Pazartesi</option>
+              <option>Salı</option>
+              <option>Çarşamba</option>
+              <option>Perşembe</option> 
+              <option>Cuma</option>
+              <option>Cumartesi</option>
+            </select>
+          </div>
+          
+          <div class="form-group">
+            <label>Yeni Saat:</label>
+            <select id="hocaDuzenleSaat" required>
+              <option value="08:00">08:00 - 08:50</option>
+              <option value="09:00">09:00 - 09:50</option>
+              <option value="10:00">10:00 - 10:50</option>
+              <option value="11:00">11:00 - 11:50</option>
+              <option value="13:00">13:00 - 13:50</option>
+              <option value="14:00">14:00 - 14:50</option>
+              <option value="15:00">15:00 - 15:50</option>
+              <option value="16:00">16:00 - 16:50</option>
+              <option value="17:00">17:00 - 17:50</option>
+            </select>
+          </div>
+          
+          <div style="display:flex; gap:10px; margin-top:15px; flex-wrap:wrap;">
+            <button type="submit" class="btn" style="background-color:#4CAF50; flex:1;">
+              ✅ Güncelle
+            </button>
+            <button 
+              type="button" 
+              class="btn" 
+              onclick="document.getElementById('hocaDuzenleFormDiv').style.display='none'" 
+              style="background-color:#f44336; flex:1;"
+            >
+              ❌ İptal
+            </button>
+          </div>
+        </form>
+      </div>
+
+      <!-- Ana Tablo -->
+      <div class="table-responsive">
+        <table id="tablo">
+          <thead>
+            <tr>
+              <th>Gün</th>
+              <th>Saat</th>
+              <th>Öğrenci</th>
+              <th>Telefon</th>
+              <th>İşlem</th>
+            </tr>
+          </thead>
+          <tbody id="tabloVeri"></tbody>
+        </table>
+      </div>
     </div>
   </section>
 
