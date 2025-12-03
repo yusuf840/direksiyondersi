@@ -30,6 +30,45 @@ document.addEventListener("DOMContentLoaded", function () {
   let girisYapanOgrenci = null;
   let kayitlar = [];
 
+  // Mobil İyileştirmeleri
+  
+  // Pull-to-refresh devre dışı (yanlışlıkla yenileme önleme)
+  let lastTouchY = 0;
+  let preventPullToRefresh = false;
+  
+  document.addEventListener('touchstart', e => {
+    if (e.touches.length !== 1) return;
+    lastTouchY = e.touches[0].clientY;
+    preventPullToRefresh = window.pageYOffset === 0;
+  }, { passive: false });
+  
+  document.addEventListener('touchmove', e => {
+    const touchY = e.touches[0].clientY;
+    const touchYDelta = touchY - lastTouchY;
+    lastTouchY = touchY;
+    if (preventPullToRefresh) {
+      preventPullToRefresh = false;
+      if (touchYDelta > 0) {
+        e.preventDefault();
+        return;
+      }
+    }
+  }, { passive: false });
+
+  // iOS Safari - Input focus sonrası zoom önleme
+  document.querySelectorAll('input, select, textarea').forEach(el => {
+    el.addEventListener('blur', () => {
+      window.scrollTo(0, 0);
+    });
+  });
+
+  // Telefon numarası input için numeric keyboard
+  const telefonInputs = document.querySelectorAll('input[type="tel"]');
+  telefonInputs.forEach(input => {
+    input.setAttribute('inputmode', 'numeric');
+    input.setAttribute('pattern', '[0-9]*');
+  });
+
   // Firebase İşlemleri
   function loadData() {
     database.ref('ogrenciKayitlar').on('value', (snapshot) => {
@@ -153,6 +192,15 @@ document.addEventListener("DOMContentLoaded", function () {
     const beniHatirla = document.getElementById("beniHatirla")?.checked;
     
     if(!ad || !tel) return alert("❌ Lütfen tüm alanları doldurun!");
+    
+    // Ad kontrolü (minimum 3 karakter)
+    if(ad.length < 3) return alert("❌ Ad en az 3 karakter olmalıdır!");
+    
+    // Ad sadece harf ve boşluk içermeli
+    if(!/^[a-zA-ZğüşıöçĞÜŞİÖÇ\s]+$/.test(ad)) {
+      return alert("❌ Ad sadece harf içermelidir!");
+    }
+    
     if(!telefonDogrula(tel)) return alert("❌ Geçersiz telefon! Format: 05XXXXXXXXX");
 
     // Beni Hatırla işaretliyse kaydet
