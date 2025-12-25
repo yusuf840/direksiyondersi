@@ -1,13 +1,11 @@
 /* ===============================================
-   TEMA 1: MODERN KURUMSAL
-   Koyu Lacivert × Açık Gri × Zeki Mavi
+   SÜRÜCÜ KURSU SİSTEMİ - SADELEŞTİRİLMİŞ
    =============================================== */
 
 /* AYDINLIK TEMA */
 :root {
   --primary: #0f172a;
   --primary-light: #1e293b;
-  --primary-dark: #020617;
   --accent: #2563eb;
   --success: #059669;
   --danger: #dc2626;
@@ -17,10 +15,8 @@
   --text-primary: #0f172a;
   --text-secondary: #475569;
   --border: #cbd5e1;
-  --shadow-sm: 0 1px 2px 0 rgba(15, 23, 42, 0.05);
-  --shadow: 0 1px 3px 0 rgba(15, 23, 42, 0.1), 0 1px 2px -1px rgba(15, 23, 42, 0.1);
-  --shadow-md: 0 4px 6px -1px rgba(15, 23, 42, 0.1), 0 2px 4px -2px rgba(15, 23, 42, 0.1);
-  --shadow-lg: 0 10px 15px -3px rgba(15, 23, 42, 0.1), 0 4px 6px -4px rgba(15, 23, 42, 0.1);
+  --shadow: 0 1px 3px rgba(15, 23, 42, 0.1);
+  --shadow-md: 0 4px 6px rgba(15, 23, 42, 0.1);
   --radius: 6px;
   --transition: all 0.2s ease;
 }
@@ -29,7 +25,6 @@
 [data-theme="dark"] {
   --primary: #94a3b8;
   --primary-light: #cbd5e1;
-  --primary-dark: #64748b;
   --accent: #fb923c;
   --success: #34d399;
   --danger: #f87171;
@@ -39,40 +34,39 @@
   --text-primary: #f1f5f9;
   --text-secondary: #cbd5e1;
   --border: #475569;
-  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.3);
-  --shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.4), 0 1px 2px -1px rgba(0, 0, 0, 0.4);
-  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.4), 0 2px 4px -2px rgba(0, 0, 0, 0.4);
-  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.5), 0 4px 6px -4px rgba(0, 0, 0, 0.5);
+  --shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.4);
 }
 
 /* Reset */
 * {
-  box-sizing: border-box;
   margin: 0;
   padding: 0;
+  box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
 }
 
 body {
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
   background: var(--bg-main);
-  min-height: 100vh;
   color: var(--text-primary);
   line-height: 1.6;
+  min-height: 100vh;
   transition: var(--transition);
-  font-weight: 500;
+  -webkit-font-smoothing: antialiased;
 }
 
 /* ===============================================
-   TEMA DEĞİŞTİRİCİ BUTONU
+   TEMA BUTONU
    =============================================== */
 
 #themeToggle {
   position: fixed;
-  top: 20px;
-  right: 20px;
+  top: 16px;
+  right: 16px;
   width: 48px;
   height: 48px;
-  border-radius: 6px;
+  border-radius: var(--radius);
   border: 1px solid var(--border);
   background: var(--bg-card);
   cursor: pointer;
@@ -80,47 +74,28 @@ body {
   align-items: center;
   justify-content: center;
   box-shadow: var(--shadow-md);
-  transition: var(--transition);
   z-index: 1000;
-}
-
-#themeToggle:hover {
-  border-color: var(--primary);
-  box-shadow: var(--shadow-lg);
+  transition: var(--transition);
 }
 
 #themeToggle:active {
-  transform: scale(0.98);
+  transform: scale(0.95);
 }
 
 #themeToggle svg {
   width: 22px;
   height: 22px;
-  transition: var(--transition);
   color: var(--text-primary);
   position: absolute;
+  pointer-events: none;
 }
 
-.moon-icon,
-.sun-icon {
+.moon-icon, .sun-icon {
   display: none;
 }
 
-.moon-icon.active,
-.sun-icon.active {
+.moon-icon.active, .sun-icon.active {
   display: block;
-  animation: iconFadeIn 0.2s ease;
-}
-
-@keyframes iconFadeIn {
-  from {
-    opacity: 0;
-    transform: scale(0.8);
-  }
-  to {
-    opacity: 1;
-    transform: scale(1);
-  }
 }
 
 /* ===============================================
@@ -129,28 +104,24 @@ body {
 
 header {
   background: var(--bg-card);
-  padding: 1.5rem 2rem;
+  padding: 1.5rem;
   box-shadow: var(--shadow);
   position: sticky;
   top: 0;
   z-index: 100;
   border-bottom: 1px solid var(--border);
-  transition: var(--transition);
 }
 
 header h1 {
   font-size: 1.5rem;
   font-weight: 600;
-  color: var(--text-primary);
-  margin-bottom: 1rem;
   text-align: center;
-  letter-spacing: -0.02em;
+  margin-bottom: 1rem;
+  color: var(--text-primary);
 }
 
-/* Menü */
 .menu {
   display: flex;
-  justify-content: center;
   gap: 0;
   background: var(--bg-main);
   padding: 4px;
@@ -165,22 +136,19 @@ header h1 {
   background: transparent;
   color: var(--text-secondary);
   border: none;
-  padding: 0.625rem 1.25rem;
+  padding: 0.625rem 1rem;
   cursor: pointer;
   font-weight: 500;
   font-size: 0.875rem;
-  transition: var(--transition);
   border-radius: 4px;
+  min-height: 44px;
+  transition: var(--transition);
 }
 
 .menu-btn.active {
   background: var(--bg-card);
   color: var(--text-primary);
-  box-shadow: var(--shadow-sm);
-}
-
-.menu-btn:hover:not(.active) {
-  color: var(--text-primary);
+  box-shadow: var(--shadow);
 }
 
 /* ===============================================
@@ -194,28 +162,27 @@ header h1 {
   background: var(--bg-card);
   padding: 2rem;
   border-radius: var(--radius);
-  box-shadow: var(--shadow-lg);
+  box-shadow: var(--shadow-md);
   border: 1px solid var(--border);
-  transition: var(--transition);
 }
 
 .panel h2 {
   font-size: 1.5rem;
   font-weight: 600;
-  color: var(--text-primary);
-  margin-bottom: 1.5rem;
   text-align: center;
+  margin-bottom: 1.5rem;
   padding-bottom: 0.75rem;
   border-bottom: 1px solid var(--border);
+  color: var(--text-primary);
 }
 
 .panel h3 {
   font-size: 1.125rem;
-  color: var(--text-primary);
-  margin: 2rem 0 1rem;
   font-weight: 600;
+  margin: 2rem 0 1rem;
   padding-left: 0.75rem;
   border-left: 3px solid var(--accent);
+  color: var(--text-primary);
 }
 
 /* ===============================================
@@ -230,21 +197,33 @@ header h1 {
   display: block;
   margin-bottom: 0.5rem;
   font-weight: 500;
-  color: var(--text-primary);
   font-size: 0.875rem;
+  color: var(--text-primary);
 }
 
 .form-group input,
 .form-group select {
   width: 100%;
-  padding: 0.625rem 0.875rem;
+  padding: 0.75rem;
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  font-size: 0.9375rem;
-  transition: var(--transition);
+  font-size: 16px; /* iOS zoom önleme */
   background: var(--bg-card);
   color: var(--text-primary);
-  font-weight: 400;
+  min-height: 44px;
+  transition: var(--transition);
+}
+
+.form-group select {
+  appearance: none;
+  background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 12 12"><path fill="%23475569" d="M6 9L1 4h10z"/></svg>');
+  background-repeat: no-repeat;
+  background-position: right 0.75rem center;
+  padding-right: 2.5rem;
+}
+
+[data-theme="dark"] .form-group select {
+  background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 12 12"><path fill="%23cbd5e1" d="M6 9L1 4h10z"/></svg>');
 }
 
 .form-group input:focus,
@@ -254,22 +233,24 @@ header h1 {
   box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
 }
 
-[data-theme="dark"] .form-group input:focus,
-[data-theme="dark"] .form-group select:focus {
-  box-shadow: 0 0 0 3px rgba(251, 146, 60, 0.15);
-}
-
 .form-group input:disabled,
 .form-group input[readonly] {
   background: var(--bg-main);
-  cursor: not-allowed;
-  color: var(--text-secondary);
   opacity: 0.6;
+  cursor: not-allowed;
 }
 
 .form-group small {
   color: var(--text-secondary);
   font-size: 0.8125rem;
+}
+
+input[type="checkbox"] {
+  width: 20px !important;
+  height: 20px !important;
+  min-height: 20px !important;
+  cursor: pointer;
+  accent-color: var(--accent);
 }
 
 /* ===============================================
@@ -278,62 +259,48 @@ header h1 {
 
 .btn {
   background: var(--primary);
-  color: var(--bg-card);
-  padding: 0.625rem 1.25rem;
+  color: white;
+  padding: 0.75rem 1.25rem;
   border-radius: var(--radius);
   border: none;
   cursor: pointer;
   font-weight: 500;
-  font-size: 0.875rem;
-  transition: var(--transition);
-  box-shadow: var(--shadow-sm);
+  font-size: 0.9375rem;
   width: 100%;
+  min-height: 48px;
+  transition: var(--transition);
+  box-shadow: var(--shadow);
 }
 
 .btn:hover {
   background: var(--primary-light);
-  box-shadow: var(--shadow-md);
 }
 
 .btn:active {
   transform: scale(0.98);
 }
 
-button[onclick*="duzenle"],
-.btn-edit {
+button[onclick*="duzenle"] {
   background: var(--warning);
-  padding: 0.5rem 0.875rem;
-  font-size: 0.8125rem;
-  margin-right: 0.5rem;
   color: white;
+  padding: 0.5rem 1rem;
+  font-size: 0.875rem;
   width: auto;
+  min-height: 40px;
 }
 
-button[onclick*="duzenle"]:hover {
-  background: #b45309;
-}
-
-button[onclick*="sil"],
-button[onclick*="Sil"],
-.btn-delete {
+button[onclick*="sil"] {
   background: var(--danger);
-  padding: 0.5rem 0.875rem;
-  font-size: 0.8125rem;
   color: white;
+  padding: 0.5rem 1rem;
+  font-size: 0.875rem;
   width: auto;
-}
-
-button[onclick*="sil"]:hover {
-  background: #b91c1c;
+  min-height: 40px;
 }
 
 button[onclick*="hocaDuzenle"] {
   background: var(--accent);
   color: white;
-}
-
-button[onclick*="hocaDuzenle"]:hover {
-  background: #1d4ed8;
 }
 
 /* ===============================================
@@ -342,26 +309,19 @@ button[onclick*="hocaDuzenle"]:hover {
 
 #istatistikler {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   gap: 0.75rem;
   margin-bottom: 1.5rem;
-  padding: 0;
 }
 
 #istatistikler span {
   background: var(--bg-main);
-  padding: 0.875rem 1rem;
+  padding: 1rem;
   border-radius: var(--radius);
   font-weight: 500;
-  color: var(--text-primary);
-  box-shadow: var(--shadow-sm);
-  border: 1px solid var(--border);
-  transition: var(--transition);
   font-size: 0.875rem;
-}
-
-#istatistikler span:hover {
-  box-shadow: var(--shadow);
+  border: 1px solid var(--border);
+  color: var(--text-primary);
 }
 
 /* ===============================================
@@ -370,16 +330,15 @@ button[onclick*="hocaDuzenle"]:hover {
 
 #searchInput {
   width: 100%;
-  padding: 0.625rem 0.875rem;
-  padding-left: 2.5rem;
+  padding: 0.75rem;
+  padding-left: 2.75rem;
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  font-size: 0.9375rem;
-  transition: var(--transition);
+  font-size: 16px;
   margin-bottom: 1.25rem;
-  background: var(--bg-card) url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="%23475569" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><path d="m21 21-4.35-4.35"></path></svg>') no-repeat 0.875rem center;
+  background: var(--bg-card) url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="%23475569" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>') no-repeat 0.875rem center;
   color: var(--text-primary);
-  font-weight: 400;
+  min-height: 48px;
 }
 
 #searchInput:focus {
@@ -388,20 +347,16 @@ button[onclick*="hocaDuzenle"]:hover {
   box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
 }
 
-[data-theme="dark"] #searchInput:focus {
-  box-shadow: 0 0 0 3px rgba(251, 146, 60, 0.15);
-}
-
 /* ===============================================
    TABLOLAR
    =============================================== */
 
 .table-responsive {
   overflow-x: auto;
-  -webkit-overflow-scrolling: touch;
   margin-top: 1.25rem;
   border-radius: var(--radius);
   border: 1px solid var(--border);
+  -webkit-overflow-scrolling: touch;
 }
 
 table {
@@ -417,18 +372,17 @@ thead {
 }
 
 thead th {
-  padding: 0.75rem 1rem;
+  padding: 0.875rem 1rem;
   text-align: left;
   font-weight: 600;
   font-size: 0.8125rem;
   color: var(--text-primary);
   text-transform: uppercase;
-  letter-spacing: 0.025em;
 }
 
 tbody tr {
-  transition: var(--transition);
   border-bottom: 1px solid var(--border);
+  transition: var(--transition);
 }
 
 tbody tr:hover {
@@ -440,42 +394,50 @@ tbody tr:last-child {
 }
 
 td {
-  padding: 0.75rem 1rem;
-  color: var(--text-primary);
+  padding: 0.875rem 1rem;
   font-size: 0.875rem;
+  color: var(--text-primary);
 }
 
 td:last-child {
   display: flex;
   gap: 0.5rem;
   flex-wrap: wrap;
-  border-bottom: none;
 }
 
 /* ===============================================
-   BOŞ SAAT TABLOSU
+   BOŞ SAATLER - MOBİL UYUMLU
    =============================================== */
+
+#hocaBosSaatTablo,
+#ogrenciBosSaatTablo {
+  margin-top: 1rem;
+}
 
 #hocaBosSaatTablo table,
 #ogrenciBosSaatTablo table {
   border: 1px solid var(--border);
   border-radius: var(--radius);
+  font-size: 0.75rem;
+}
+
+#hocaBosSaatTablo th,
+#ogrenciBosSaatTablo th {
+  padding: 0.5rem 0.25rem;
+  font-size: 0.7rem;
+  background: var(--bg-main);
 }
 
 #hocaBosSaatTablo td,
 #ogrenciBosSaatTablo td {
+  padding: 0.5rem 0.25rem;
   text-align: center;
-  font-weight: 500;
-  padding: 0.625rem 0.5rem;
-  font-size: 0.8125rem;
-  transition: var(--transition);
+  font-weight: 600;
+  font-size: 0.7rem;
+  border: 1px solid var(--border);
 }
 
-#hocaBosSaatTablo td:hover,
-#ogrenciBosSaatTablo td:hover {
-  opacity: 0.9;
-}
-
+/* Boş saat liste görünümü (mobil için) */
 #hocaBosSaatListe {
   list-style: none;
   padding: 0;
@@ -484,19 +446,13 @@ td:last-child {
 
 #hocaBosSaatListe li {
   background: var(--bg-main);
-  padding: 0.75rem 1rem;
+  padding: 0.875rem 1rem;
   margin-bottom: 0.5rem;
   border-radius: var(--radius);
-  box-shadow: var(--shadow-sm);
   font-weight: 500;
-  color: var(--text-primary);
-  transition: var(--transition);
-  border: 1px solid var(--border);
   font-size: 0.875rem;
-}
-
-#hocaBosSaatListe li:hover {
-  box-shadow: var(--shadow);
+  border: 1px solid var(--border);
+  color: var(--text-primary);
 }
 
 /* ===============================================
@@ -509,35 +465,19 @@ td:last-child {
   border-radius: var(--radius);
   padding: 1.5rem;
   margin-top: 1.5rem;
-  box-shadow: var(--shadow-sm);
-  transition: var(--transition);
 }
 
 #hocaDuzenleFormDiv h3 {
-  color: var(--text-primary);
   margin-bottom: 1.25rem;
   border-left: 3px solid var(--accent);
-}
-
-#hocaDuzenleFormDiv .form-group input[readonly] {
-  background: var(--bg-card);
-  border-color: var(--border);
 }
 
 #hocaDuzenleFormDiv button[type="submit"] {
   background: var(--success);
 }
 
-#hocaDuzenleFormDiv button[type="submit"]:hover {
-  background: #047857;
-}
-
 #hocaDuzenleFormDiv button[type="button"] {
   background: var(--text-secondary);
-}
-
-#hocaDuzenleFormDiv button[type="button"]:hover {
-  background: var(--text-primary);
 }
 
 /* ===============================================
@@ -562,20 +502,12 @@ td:last-child {
   background: #dc2626;
 }
 
-#pdfBtn:hover {
-  background: #b91c1c;
-}
-
 #excelBtn {
   background: #059669;
 }
 
-#excelBtn:hover {
-  background: #047857;
-}
-
 /* ===============================================
-   SCROLL BAR
+   SCROLLBAR
    =============================================== */
 
 ::-webkit-scrollbar {
@@ -592,20 +524,16 @@ td:last-child {
   border-radius: 4px;
 }
 
-::-webkit-scrollbar-thumb:hover {
-  background: var(--text-secondary);
-}
-
 /* ===============================================
-   MOBİL UYUMLULUK
+   MOBİL RESPONSIVE
    =============================================== */
 
 @media (max-width: 768px) {
   #themeToggle {
-    width: 42px;
-    height: 42px;
-    top: 16px;
-    right: 16px;
+    width: 44px;
+    height: 44px;
+    top: 12px;
+    right: 12px;
   }
 
   #themeToggle svg {
@@ -615,25 +543,15 @@ td:last-child {
 
   header {
     padding: 1rem;
-    padding-top: 4rem;
+    padding-top: 3.5rem;
   }
 
   header h1 {
     font-size: 1.25rem;
-    margin-bottom: 0.75rem;
-  }
-
-  .menu {
-    max-width: 100%;
-  }
-
-  .menu-btn {
-    padding: 0.5rem 1rem;
-    font-size: 0.8125rem;
   }
 
   .panel {
-    margin: 1rem;
+    margin: 1rem 0.75rem;
     padding: 1.25rem;
   }
 
@@ -641,13 +559,12 @@ td:last-child {
     font-size: 1.25rem;
   }
 
-  #istatistikler {
-    grid-template-columns: 1fr;
-    gap: 0.5rem;
+  .panel h3 {
+    font-size: 1rem;
   }
 
-  .btn {
-    width: 100%;
+  #istatistikler {
+    grid-template-columns: 1fr;
   }
 
   .butonlar {
@@ -666,12 +583,32 @@ td:last-child {
     width: 100%;
   }
 
-  #hocaDuzenleFormDiv {
-    padding: 1.25rem;
-  }
-
   #hocaDuzenleFormDiv > div[style*="flex"] {
     flex-direction: column !important;
+  }
+
+  #hocaDuzenleFormDiv button {
+    width: 100% !important;
+  }
+
+  /* BOŞ SAATLER MOBİL GÖRÜNÜMÜ - DÜZELTİLDİ */
+  /* Tabloları daha kompakt göster, gizleme */
+  #hocaBosSaatTablo table,
+  #ogrenciBosSaatTablo table {
+    font-size: 0.65rem;
+    min-width: 100%;
+  }
+  
+  #hocaBosSaatTablo th,
+  #ogrenciBosSaatTablo th {
+    padding: 0.4rem 0.2rem;
+    font-size: 0.6rem;
+  }
+  
+  #hocaBosSaatTablo td,
+  #ogrenciBosSaatTablo td {
+    padding: 0.4rem 0.2rem;
+    font-size: 0.6rem;
   }
 }
 
@@ -681,6 +618,7 @@ td:last-child {
   }
 
   .panel {
+    margin: 0.75rem 0.5rem;
     padding: 1rem;
   }
 
@@ -688,19 +626,48 @@ td:last-child {
     font-size: 1.125rem;
   }
 
+  .menu-btn {
+    font-size: 0.8125rem;
+    padding: 0.5rem 0.75rem;
+  }
+
   table {
     font-size: 0.8125rem;
   }
 
   th, td {
-    padding: 0.625rem 0.5rem;
+    padding: 0.75rem 0.5rem;
+  }
+  
+  /* Çok küçük ekranlarda boş saatler daha da kompakt */
+  #hocaBosSaatTablo table,
+  #ogrenciBosSaatTablo table {
+    font-size: 0.6rem;
+  }
+  
+  #hocaBosSaatTablo th,
+  #ogrenciBosSaatTablo th {
+    padding: 0.3rem 0.15rem;
+    font-size: 0.55rem;
+  }
+  
+  #hocaBosSaatTablo td,
+  #ogrenciBosSaatTablo td {
+    padding: 0.3rem 0.15rem;
+    font-size: 0.55rem;
   }
 }
 
-/* ===============================================
-   ANİMASYONLAR
-   =============================================== */
+/* Safe area için iOS desteği */
+@supports (padding: max(0px)) {
+  body {
+    padding-left: max(0px, env(safe-area-inset-left));
+    padding-right: max(0px, env(safe-area-inset-right));
+    padding-bottom: max(0px, env(safe-area-inset-bottom));
+  }
+}
 
+/* Animasyon */
 @keyframes fadeIn {
   from {
     opacity: 0;
