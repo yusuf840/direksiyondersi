@@ -780,7 +780,8 @@ function planlamaRaporuGoster(rapor) {
     planlanmayanSayisi.textContent = rapor.basarisiz.length;
     
     let html = '';
-    rapor.basarisiz.forEach(r => {
+    rapor.basarisiz.forEach((r, index) => {
+      // Öğrencinin ID'sini bul
       const ogrenci = uygunluklar.find(u => u.ad === r.ad && u.tel === r.tel && u.gun === r.gun);
       const ogrenciId = ogrenci ? ogrenci.ogrenciId : null;
       
@@ -811,7 +812,7 @@ function planlamaRaporuGoster(rapor) {
     });
     
     planlanmayanListe.innerHTML = html;
-    planlanmayanListe.style.display = 'block';
+    planlanmayanListe.style.display = 'block'; // Otomatik aç
     document.getElementById('planlanmayanToggleText').textContent = 'Gizle';
   } else {
     planlanmayanBolum.style.display = 'none';
@@ -1000,9 +1001,11 @@ function planlanmayanToggle() {
   }
 }
 
+// Planlanamayan öğrenci düzenleme
 let mevcutPlanlanmayanOgrenci = null;
 
 function planlanmayanDuzenle(ogrenciId, ad, tel, mevcutGun) {
+  // Öğrenciyi bul
   const ogrenci = uygunluklar.find(u => u.ogrenciId === ogrenciId && u.gun === mevcutGun);
   
   if (!ogrenci) {
@@ -1017,11 +1020,13 @@ function planlanmayanDuzenle(ogrenciId, ad, tel, mevcutGun) {
     eskiGun: mevcutGun
   };
   
+  // Modal'ı doldur
   document.getElementById('planlanmayanDuzenleAd').textContent = ad;
   document.getElementById('planlanmayanDuzenleTel').textContent = `📱 ${tel}`;
   document.getElementById('planlanmayanDuzenleGun').value = mevcutGun;
-  document.getElementById('planlanmayanDuzenleSaat').value = CONFIG.SLOTLAR[0];
+  document.getElementById('planlanmayanDuzenleSaat').value = CONFIG.SLOTLAR[0]; // İlk saati seç
   
+  // Modal'ı aç
   document.getElementById('planlanmayanDuzenleModal').style.display = 'flex';
 }
 
@@ -1039,6 +1044,7 @@ async function planlanmayanKaydet() {
   const yeniGun = document.getElementById('planlanmayanDuzenleGun').value;
   const yeniSaat = document.getElementById('planlanmayanDuzenleSaat').value;
   
+  // Seçilen slot'un dolu olup olmadığını kontrol et
   const slotDoluMu = uygunluklar.some(u => 
     u.gun === yeniGun && 
     u.planlandi === true && 
@@ -1051,16 +1057,18 @@ async function planlanmayanKaydet() {
     }
   }
   
+  // Eski kaydı bul ve güncelle
   const eskiKayit = uygunluklar.find(u => 
     u.ogrenciId === mevcutPlanlanmayanOgrenci.ogrenciId && 
     u.gun === mevcutPlanlanmayanOgrenci.eskiGun
   );
   
   if (eskiKayit) {
+    // Günü güncelle
     eskiKayit.gun = yeniGun;
     eskiKayit.planlandi = true;
     eskiKayit.planlandigiSaat = yeniSaat;
-    eskiKayit.saatler = [yeniSaat];
+    eskiKayit.saatler = [yeniSaat]; // Yeni saati ekle
     
     try {
       await veriKaydet();
