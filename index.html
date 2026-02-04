@@ -17,10 +17,10 @@
   <title>Direksiyon Dersi Programı</title>
   <link rel="stylesheet" href="style.css">
   
-  <!-- Firebase CDN -->
-  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
-
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
+  
   <!-- PDF ve Excel Kütüphaneleri -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
@@ -28,12 +28,12 @@
 </head>
 <body>
   
-  <!-- Tema Değiştirme Butonu -->
+  <!-- Tema Butonu -->
   <button id="themeToggle" aria-label="Tema Değiştir">
-    <svg class="moon-icon active" xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <svg class="moon-icon active" xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
       <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
     </svg>
-    <svg class="sun-icon" xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <svg class="sun-icon" xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
       <circle cx="12" cy="12" r="5"></circle>
       <line x1="12" y1="1" x2="12" y2="3"></line>
       <line x1="12" y1="21" x2="12" y2="23"></line>
@@ -50,7 +50,7 @@
     <h1> Direksiyon Dersi Programı</h1>
     <div class="menu">
       <button id="ogrenciBtn" class="menu-btn active"> Öğrenci</button>
-      <button id="hocaBtn" class="menu-btn"> Eğitmen</button>
+      <button id="hocaBtn" class="menu-btn"> Hoca</button>
     </div>
   </header>
 
@@ -60,6 +60,17 @@
     <!-- Öğrenci Giriş -->
     <div id="ogrenciLoginDiv">
       <h2>Öğrenci Girişi</h2>
+      
+      <!-- Bilgilendirme Kutusu -->
+      <div class="info-box info-box-primary">
+        <p>
+          ℹ️ <strong>Bilgilendirme:</strong><br>
+          Giriş yaptıktan sonra <strong>uygun olduğunuz gün ve saatleri</strong> bildireceksiniz.<br>
+          <strong>⚠️ Bunlar kesin randevu değil, sadece uygunluk bildirimidir.</strong><br>
+          Kesin randevunuz hocamız tarafından oluşturulacaktır.
+        </p>
+      </div>
+      
       <form id="ogrenciLoginForm">
         <div class="form-group">
           <label>Ad Soyad:</label>
@@ -67,14 +78,12 @@
             type="text" 
             id="loginAdSoyad" 
             required 
-            placeholder="Ad Soyad (min. 3 karakter)"
+            placeholder="Örn: Ahmet Yılmaz"
             minlength="3"
             maxlength="100"
-            pattern="[a-zA-ZğüşıöçĞÜŞİÖÇ\s]+"
-            title="Ad en az 3 karakter olmalı ve sadece harf içermelidir"
           >
           <small style="color:#666; font-size:0.85rem; display:block; margin-top:4px;">
-            ✓ En az 3 karakter • Sadece harf
+            ✓ En az 3 karakter
           </small>
         </div>
         
@@ -103,15 +112,30 @@
         <button type="submit" class="btn">Giriş Yap</button>
         
         <!-- Farklı Hesap Butonu -->
-        <button type="button" id="farkliHesapBtn" class="btn" style="background-color:#6c757d; margin-top:10px;">
-           Farklı Hesap
+        <button type="button" id="farkliHesapBtn" class="btn btn-secondary" style="margin-top:10px; display:none;">
+          Farklı Hesap
         </button>
       </form>
     </div>
 
     <!-- Öğrenci Form -->
     <div id="ogrenciFormDiv" style="display:none;">
-      <h2>Uygun Saatlerini Seç</h2>
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem; flex-wrap:wrap; gap:1rem;">
+        <h2 style="margin:0;">Uygunluk Bildirimi</h2>
+        <button onclick="ogrenciCikis()" class="btn btn-secondary" style="width:auto; padding:0.6rem 1.2rem;">
+           Çıkış
+        </button>
+      </div>
+      
+      <!-- Başarı Mesajı -->
+      <div class="info-box info-box-success">
+        <p>
+          ✅ <strong>Giriş başarılı!</strong><br>
+          Şimdi uygun olduğunuz <strong>gün ve saatleri</strong> seçebilirsiniz.<br>
+          💡 <strong>Unutmayın:</strong> Seçtiğiniz saatler kesin randevu değildir.
+        </p>
+      </div>
+      
       <form id="formUygunluk">
         <input type="hidden" id="duzenleIndex" value="-1">
         
@@ -126,55 +150,98 @@
         </div>
         
         <div class="form-group">
-          <label>Uygun Gün:</label>
-          <select id="gun">
-            <option>Pazartesi</option>
-            <option>Salı</option>
-            <option>Çarşamba</option>
-            <option>Perşembe</option>
-            <option>Cuma</option>
-            <option>Cumartesi</option>
+          <label>Hangi gün için uygunluk bildirmek istiyorsunuz?</label>
+          <select id="gun" required>
+            <option value="Pazartesi">Pazartesi</option>
+            <option value="Salı">Salı</option>
+            <option value="Çarşamba">Çarşamba</option>
+            <option value="Perşembe">Perşembe</option>
+            <option value="Cuma">Cuma</option>
+            <option value="Cumartesi">Cumartesi</option>
           </select>
         </div>
         
         <div class="form-group">
-          <label>Uygun Saat:</label>
-          <select id="saat" required>
-            <option value="08:00">08:00 - 08:50</option>
-            <option value="09:00">09:00 - 09:50</option>
-            <option value="10:00">10:00 - 10:50</option>
-            <option value="11:00">11:00 - 11:50</option>
-            <option value="13:00">13:00 - 13:50</option>
-            <option value="14:00">14:00 - 14:50</option>
-            <option value="15:00">15:00 - 15:50</option>
-            <option value="16:00">16:00 - 16:50</option>
-            <option value="17:00">17:00 - 17:50</option>
-          </select>
+          <label>Uygunluk tipinizi seçin:</label>
+          <div style="margin-top:10px;">
+            <label class="radio-option" id="tumGunLabel">
+              <input type="radio" name="uygunlukTipi" value="tumGun" id="tumGunRadio" style="width:auto; margin:0;">
+              <div>
+                <strong style="display:block; color:var(--primary); font-size:1rem;">Tüm gün uygunum</strong>
+                <small style="color:#666; font-size:0.85rem;">08:00 - 17:00 arası tüm saatler</small>
+              </div>
+            </label>
+            
+            <label class="radio-option" id="saatBazliLabel">
+              <input type="radio" name="uygunlukTipi" value="saatBazli" id="saatBazliRadio" style="width:auto; margin:0;">
+              <div>
+                <strong style="display:block; color:var(--primary); font-size:1rem;">Sadece belirli saatlerde uygunum</strong>
+                <small style="color:#666; font-size:0.85rem;">Aşağıdan saatleri seçebilirsiniz</small>
+              </div>
+            </label>
+          </div>
         </div>
         
-        <button type="submit" class="btn"> Kaydet</button>
+        <!-- Saat Seçimi -->
+        <div class="form-group" id="saatSecimDiv" style="display:none;">
+          <label>Hangi saatlerde uygunsunuz? <small style="color:#666;">(Birden fazla seçebilirsiniz)</small></label>
+          <div class="time-grid">
+            <label class="time-checkbox">
+              <input type="checkbox" name="saatler" value="08:00" style="width:auto; margin:0;">
+              <span>08:00 - 08:50</span>
+            </label>
+            <label class="time-checkbox">
+              <input type="checkbox" name="saatler" value="09:00" style="width:auto; margin:0;">
+              <span>09:00 - 09:50</span>
+            </label>
+            <label class="time-checkbox">
+              <input type="checkbox" name="saatler" value="10:00" style="width:auto; margin:0;">
+              <span>10:00 - 10:50</span>
+            </label>
+            <label class="time-checkbox">
+              <input type="checkbox" name="saatler" value="11:00" style="width:auto; margin:0;">
+              <span>11:00 - 11:50</span>
+            </label>
+            <label class="time-checkbox">
+              <input type="checkbox" name="saatler" value="13:00" style="width:auto; margin:0;">
+              <span>13:00 - 13:50</span>
+            </label>
+            <label class="time-checkbox">
+              <input type="checkbox" name="saatler" value="14:00" style="width:auto; margin:0;">
+              <span>14:00 - 14:50</span>
+            </label>
+            <label class="time-checkbox">
+              <input type="checkbox" name="saatler" value="15:00" style="width:auto; margin:0;">
+              <span>15:00 - 15:50</span>
+            </label>
+            <label class="time-checkbox">
+              <input type="checkbox" name="saatler" value="16:00" style="width:auto; margin:0;">
+              <span>16:00 - 16:50</span>
+            </label>
+            <label class="time-checkbox">
+              <input type="checkbox" name="saatler" value="17:00" style="width:auto; margin:0;">
+              <span>17:00 - 17:50</span>
+            </label>
+          </div>
+        </div>
+        
+        <button type="submit" class="btn"> Uygunluğu Kaydet</button>
       </form>
 
-      <!-- Boş Saatleri Göster -->
-      <div style="margin-top: 15px;">
-        <button type="button" id="bosSaatBtn" class="btn"> Boş Saatleri Göster/Gizle</button>
-        <div id="ogrenciBosSaatTablo" style="margin-top: 10px; display: none;"></div>
-      </div>
-
-      <!-- Kaydedilen Saatler -->
-      <h3>Kaydedilen Saatler</h3>
+      <!-- Kaydedilen Uygunluklar -->
+      <h3> Kaydedilen Uygunluklarınız</h3>
       <div class="table-responsive">
         <table id="ogrenciTablo">
           <thead>
             <tr>
-              <th>Ad Soyad</th>
-              <th>Telefon</th>
               <th>Gün</th>
-              <th>Saat</th>
+              <th>Saatler</th>
               <th>İşlem</th>
             </tr>
           </thead>
-          <tbody id="ogrenciTabloVeri"></tbody>
+          <tbody id="ogrenciTabloVeri">
+            <tr><td colspan="3" class="empty-state">Henüz uygunluk bildirmediniz.</td></tr>
+          </tbody>
         </table>
       </div>
     </div>
@@ -183,132 +250,371 @@
   <!-- ==================== HOCA PANELİ ==================== -->
   <section id="hocaPanel" class="panel">
     
-    <!-- Çıkış Butonu -->
-    <div id="hocaCikisDiv" style="display:none; text-align:right; margin-bottom:15px;">
-      <button onclick="hocaCikisYap()" class="btn" style="background-color:#6c757d;">
-         Çıkış Yap
-      </button>
-    </div>
-    
     <!-- Hoca Giriş -->
-    <h2>Eğitmen Girişi</h2>
-    <form id="hocaLoginForm">
-      <div class="form-group">
-        <label>Şifre:</label>
-        <input type="password" id="sifre" required placeholder="Şifrenizi girin">
-      </div>
-      <button type="submit" class="btn"> Giriş Yap</button>
-    </form>
+    <div id="hocaLoginDiv">
+      <h2>Hoca Girişi</h2>
+      <form id="hocaLoginForm">
+        <div class="form-group">
+          <label>Şifre:</label>
+          <input type="password" id="sifre" required placeholder="Şifrenizi girin">
+        </div>
+        <button type="submit" class="btn"> Giriş Yap</button>
+      </form>
+    </div>
 
-    <!-- Hoca Tablosu ve İstatistikler -->
-    <div id="hocaTabloDiv" style="display:none; margin-top:20px;">
-      <h3> Öğrenci Programı</h3>
+    <!-- Hoca Ana Panel -->
+    <div id="hocaTabloDiv" style="display:none;">
       
-      <!-- İstatistikler -->
-      <div id="istatistikler">
-        <span id="toplamOgrenci"> Toplam Öğrenci: 0</span>
-        <span id="enYogunGun"> En Yoğun Gün: -</span>
-        <span id="bosSaatler"> Boş Saatler: 0</span>
-      </div>
-
-      <!-- İndirme Butonları -->
-      <div class="butonlar">
-        <button id="pdfBtn" class="btn"> PDF İndir</button>
-        <button id="excelBtn" class="btn"> Excel İndir</button>
-        <button onclick="tumKayitlariSil()" class="btn" style="background-color:#dc3545;">
-           Tüm Kayıtları Sil
+      <!-- Minimal Header -->
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem; flex-wrap:wrap; gap:0.5rem;">
+        <h2 style="margin:0;"> Hoca Paneli</h2>
+        <button onclick="hocaCikis()" class="btn btn-secondary" style="width:auto; padding:0.6rem 1.2rem;">
+           Çıkış
         </button>
       </div>
 
-      <!-- Arama -->
-      <div style="margin-bottom:10px;">
-        <input 
-          type="text" 
-          id="searchInput" 
-          placeholder=" Gün, Saat, Öğrenci veya Telefon ara..."
-        >
+      <!-- Ana Kontrol Bölgesi (Sade) -->
+      <div style="background:var(--bg-card); padding:1.5rem; border-radius:var(--radius); box-shadow:var(--shadow); margin-bottom:1.5rem;">
+        <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:1rem; margin-bottom:1rem;">
+          <h3 style="margin:0; color:var(--primary); font-size:1.3rem;"> Bu Haftanın Planı</h3>
+         
+        </div>
+        
+        <!-- Tek Ana Buton -->
+        <button onclick="otomatikPlanOlustur()" class="btn btn-success" style="width:100%; font-size:1.1rem; padding:1rem;">
+           Otomatik Plan Oluştur
+        </button>
       </div>
 
-      <!-- Boş Saatleri Göster -->
-      <div id="hocaBosSaatDetay" style="margin-top:10px;">
-        <button id="hocaBosSaatBtn" class="btn"> Boş Saatleri Göster/Gizle</button>
-        <ul id="hocaBosSaatListe" style="list-style:none; padding-left:0; display:none; margin-top:10px;"></ul>
-        <div id="hocaBosSaatTablo" style="margin-top: 10px; display: none;"></div>
+      <!-- Haftalık Takvim (Ana Odak) -->
+      <div style="margin-bottom:2rem;">
+        <div class="haftalik-takvim" id="haftalikTakvim">
+          <!-- JavaScript ile doldurulacak -->
+        </div>
       </div>
 
-      <!-- Hoca Düzenleme Formu -->
-      <div id="hocaDuzenleFormDiv" style="display:none; margin-top:20px;">
-        <h3>✏️ Randevu Düzenle</h3>
-        <form id="hocaDuzenleForm">
-          <input type="hidden" id="hocaDuzenleIndex" value="-1">
-          
-          <div class="form-group">
-            <label>Öğrenci Adı:</label>
-            <input type="text" id="hocaDuzenleOgrenci" readonly>
+      <!-- Planlanamayan Öğrenciler (Kompakt) -->
+      <div id="planlanmayanBolum" style="margin-bottom:2rem; display:none;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.5rem;">
+          <h3 style="margin:0; color:var(--warning);">⚠️ Planlanamayan Öğrenciler (<span id="planlanmayanSayisi">0</span>)</h3>
+          <button onclick="planlanmayanToggle()" class="btn btn-secondary" style="width:auto; padding:0.4rem 0.8rem; font-size:0.85rem;">
+            <span id="planlanmayanToggleText">Göster</span>
+          </button>
+        </div>
+        <div id="planlanmayanListe" class="planlanan-liste" style="display:none;">
+          <!-- JavaScript ile doldurulacak -->
+        </div>
+      </div>
+
+      <!-- Alt Butonlar (İkincil) -->
+      <div style="display:flex; gap:1rem; flex-wrap:wrap; padding-top:1rem; border-top:2px solid var(--border);">
+        <button onclick="detaylariGoster()" class="btn" style="flex:1; min-width:150px; background:#6c757d;">
+           Detayları Göster
+        </button>
+        <button onclick="ayarlariGoster()" class="btn" style="flex:1; min-width:150px; background:#6c757d;">
+          ⚙️ Ayarlar
+        </button>
+      </div>
+    </div>
+
+    <!-- Detaylar Modal -->
+    <div id="detaylarModal" class="modal" style="display:none;">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3> Detaylı Bilgiler</h3>
+          <button onclick="detaylariKapat()" class="modal-close">✕</button>
+        </div>
+        
+        <!-- İstatistikler -->
+        <div id="istatistikler" style="margin-bottom:1.5rem;">
+          <div class="stat-card">
+            <div class="stat-icon">👥</div>
+            <div class="stat-label">Toplam Öğrenci</div>
+            <div class="stat-value" id="toplamOgrenci">0</div>
           </div>
-          
-          <div class="form-group">
-            <label>Telefon:</label>
-            <input type="text" id="hocaDuzenleTelefon" readonly>
+          <div class="stat-card">
+            <div class="stat-icon">📝</div>
+            <div class="stat-label">Toplam Uygunluk</div>
+            <div class="stat-value" id="toplamUygunluk">0</div>
           </div>
-          
+          <div class="stat-card">
+            <div class="stat-icon">✅</div>
+            <div class="stat-label">Planlanan</div>
+            <div class="stat-value" id="planlananDers">0</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-icon">⏰</div>
+            <div class="stat-label">Planlanmayan</div>
+            <div class="stat-value" id="planlanmayanDers">0</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-icon">📅</div>
+            <div class="stat-label">En Yoğun Gün</div>
+            <div class="stat-value" id="enYogunGun" style="font-size:1.25rem;">-</div>
+          </div>
+        </div>
+
+        <!-- Arama -->
+        <div style="margin-bottom:1rem;">
+          <input 
+            type="text" 
+            id="searchInput" 
+            placeholder="🔍 Gün, Saat, Öğrenci veya Telefon ara..."
+          >
+        </div>
+
+        <!-- Tüm Uygunluklar Tablosu -->
+        <div class="table-responsive">
+          <table id="tablo">
+            <thead>
+              <tr>
+                <th>Öğrenci</th>
+                <th>Telefon</th>
+                <th>Gün</th>
+                <th>Saatler</th>
+                <th>Durum</th>
+                <th>İşlem</th>
+              </tr>
+            </thead>
+            <tbody id="tabloVeri">
+              <tr><td colspan="6" class="empty-state">Henüz kayıt yok.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Ayarlar Modal -->
+    <div id="ayarlarModal" class="modal" style="display:none;">
+      <div class="modal-content" style="max-width:500px;">
+        <div class="modal-header">
+          <h3>⚙️ Ayarlar & İşlemler</h3>
+          <button onclick="ayarlariKapat()" class="modal-close">✕</button>
+        </div>
+        
+        <div class="ayarlar-liste">
+          <button onclick="pdfIndir(); ayarlariKapat();" class="btn btn-danger" style="width:100%; margin-bottom:0.75rem;">
+            📄 PDF İndir
+          </button>
+          <button onclick="excelIndir(); ayarlariKapat();" class="btn" style="width:100%; margin-bottom:0.75rem; background:#2d7a4f;">
+            📊 Excel İndir
+          </button>
+          <button onclick="planlamaTemizle(); ayarlariKapat();" class="btn btn-warning" style="width:100%; margin-bottom:0.75rem;">
+            🔄 Planlamayı Sıfırla
+          </button>
+          <button onclick="tumKayitlariSil(); ayarlariKapat();" class="btn" style="width:100%; background:#dc3545;">
+            🗑️ Tüm Kayıtları Sil
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Ders Düzenleme Modal -->
+    <div id="dersDuzenleModal" class="modal" style="display:none;">
+      <div class="modal-content" style="max-width:600px;">
+        <div class="modal-header">
+          <h3>✏️ Ders Düzenle</h3>
+          <button onclick="dersDuzenleKapat()" class="modal-close">✕</button>
+        </div>
+        
+        <div style="padding:1.5rem;">
+          <!-- Öğrenci Bilgisi -->
+          <div style="background:var(--bg-main); padding:1rem; border-radius:var(--radius); margin-bottom:1.5rem;">
+            <div style="font-size:1.1rem; font-weight:600; color:var(--primary); margin-bottom:0.5rem;" id="duzenleOgrenciAdi">
+              Öğrenci Adı
+            </div>
+            <div style="font-size:0.9rem; color:var(--text-secondary);" id="duzenleOgrenciTel">
+              📱 05XX XXX XXXX
+            </div>
+          </div>
+
+          <!-- Gün Seçimi -->
           <div class="form-group">
-            <label>Yeni Gün:</label>
-            <select id="hocaDuzenleGun" required>
-              <option>Pazartesi</option>
-              <option>Salı</option>
-              <option>Çarşamba</option>
-              <option>Perşembe</option> 
-              <option>Cuma</option>
-              <option>Cumartesi</option>
+            <label>📅 Gün:</label>
+            <select id="duzenleGun" class="form-control">
+              <option value="Pazartesi">Pazartesi</option>
+              <option value="Salı">Salı</option>
+              <option value="Çarşamba">Çarşamba</option>
+              <option value="Perşembe">Perşembe</option>
+              <option value="Cuma">Cuma</option>
+              <option value="Cumartesi">Cumartesi</option>
             </select>
           </div>
-          
+
+          <!-- Saat Seçimi -->
           <div class="form-group">
-            <label>Yeni Saat:</label>
-            <select id="hocaDuzenleSaat" required>
-              <option value="08:00">08:00 - 08:50</option>
-              <option value="09:00">09:00 - 09:50</option>
-              <option value="10:00">10:00 - 10:50</option>
-              <option value="11:00">11:00 - 11:50</option>
-              <option value="13:00">13:00 - 13:50</option>
-              <option value="14:00">14:00 - 14:50</option>
-              <option value="15:00">15:00 - 15:50</option>
-              <option value="16:00">16:00 - 16:50</option>
-              <option value="17:00">17:00 - 17:50</option>
+            <label>⏰ Saat:</label>
+            <select id="duzenleSaat" class="form-control">
+              <option value="08:00">08:00</option>
+              <option value="09:00">09:00</option>
+              <option value="10:00">10:00</option>
+              <option value="11:00">11:00</option>
+              <option value="13:00">13:00</option>
+              <option value="14:00">14:00</option>
+              <option value="15:00">15:00</option>
+              <option value="16:00">16:00</option>
+              <option value="17:00">17:00</option>
             </select>
           </div>
-          
-          <div style="display:flex; gap:10px; margin-top:15px; flex-wrap:wrap;">
-            <button type="submit" class="btn" style="background-color:#4CAF50; flex:1;">
-              ✅ Güncelle
+
+          <!-- Butonlar -->
+          <div style="display:flex; gap:0.75rem; margin-top:1.5rem;">
+            <button onclick="dersiKaydet()" class="btn btn-success" style="flex:1;">
+              💾 Kaydet
             </button>
-            <button 
-              type="button" 
-              class="btn" 
-              onclick="document.getElementById('hocaDuzenleFormDiv').style.display='none'" 
-              style="background-color:#f44336; flex:1;"
-            >
-               İptal
+            <button onclick="dersiSil()" class="btn btn-danger" style="flex:1;">
+              🗑️ Dersi Sil
             </button>
           </div>
-        </form>
+          <button onclick="dersDuzenleKapat()" class="btn btn-secondary" style="width:100%; margin-top:0.75rem;">
+            ❌ İptal
+          </button>
+        </div>
       </div>
+    </div>
 
-      <!-- Ana Tablo -->
-      <div class="table-responsive">
-        <table id="tablo">
-          <thead>
-            <tr>
-              <th>Gün</th>
-              <th>Saat</th>
-              <th>Öğrenci</th>
-              <th>Telefon</th>
-              <th>İşlem</th>
-            </tr>
-          </thead>
-          <tbody id="tabloVeri"></tbody>
-        </table>
+    <!-- WhatsApp Mesaj Modal -->
+    <div id="whatsappModal" class="modal" style="display:none;">
+      <div class="modal-content" style="max-width:650px;">
+        <div class="modal-header" style="background:#25D366;">
+          <h3>📱 WhatsApp Mesaj Gönder</h3>
+          <button onclick="whatsappModalKapat()" class="modal-close">✕</button>
+        </div>
+        
+        <div style="padding:1.5rem;">
+          <!-- Öğrenci Bilgisi -->
+          <div style="background:var(--bg-main); padding:1rem; border-radius:var(--radius); margin-bottom:1rem;">
+            <div style="font-size:1.1rem; font-weight:600; color:var(--primary); margin-bottom:0.5rem;">
+              <span id="whatsappOgrenciAdi">Öğrenci Adı</span>
+            </div>
+            <div style="font-size:0.9rem; color:var(--text-secondary);">
+              📅 <span id="whatsappGun">Pazartesi</span> • 
+              ⏰ <span id="whatsappSaat">10:00</span>
+            </div>
+          </div>
+
+          <!-- Mesaj Şablonları -->
+          <div style="margin-bottom:1rem;">
+            <label style="display:block; margin-bottom:0.5rem; font-weight:600;">📝 Hazır Şablonlar:</label>
+            <div style="display:grid; grid-template-columns:repeat(2, 1fr); gap:0.5rem;">
+              <button onclick="mesajSablonSec('onay')" class="btn btn-secondary" style="padding:0.5rem; font-size:0.85rem;">
+                ✅ Onay
+              </button>
+              <button onclick="mesajSablonSec('hatirlatma')" class="btn btn-secondary" style="padding:0.5rem; font-size:0.85rem;">
+                📢 Hatırlatma
+              </button>
+              <button onclick="mesajSablonSec('degisiklik')" class="btn btn-secondary" style="padding:0.5rem; font-size:0.85rem;">
+                🔄 Değişiklik
+              </button>
+              <button onclick="mesajSablonSec('iptal')" class="btn btn-secondary" style="padding:0.5rem; font-size:0.85rem;">
+                ⚠️ İptal
+              </button>
+            </div>
+          </div>
+
+          <!-- Telefon -->
+          <div class="form-group">
+            <label>📱 Telefon:</label>
+            <input type="tel" id="whatsappTelefon" class="form-control" placeholder="05XX XXX XXXX" readonly>
+          </div>
+
+          <!-- Mesaj -->
+          <div class="form-group">
+            <label>💬 Mesaj:</label>
+            <textarea id="whatsappMesaj" class="form-control" rows="8" style="resize:vertical; font-family:inherit;"></textarea>
+          </div>
+
+          <!-- Gönder Butonu -->
+          <div style="display:flex; gap:0.75rem; margin-top:1.5rem;">
+            <button onclick="whatsappGonder()" class="btn" style="flex:1; background:#25D366;">
+              📤 WhatsApp'tan Gönder
+            </button>
+            <button onclick="whatsappModalKapat()" class="btn btn-secondary" style="width:auto; padding:0.75rem 1.5rem;">
+              ❌ İptal
+            </button>
+          </div>
+
+          <!-- Bilgilendirme -->
+          <div style="margin-top:1rem; padding:0.75rem; background:rgba(37,211,102,0.1); border-radius:var(--radius); font-size:0.85rem; color:var(--text-secondary);">
+            ℹ️ WhatsApp Web açılacak. Mesajı kontrol edip gönderin.
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Planlanamayan Öğrenci Düzenleme Modal -->
+    <div id="planlanmayanDuzenleModal" class="modal" style="display:none;">
+      <div class="modal-content" style="max-width:600px;">
+        <div class="modal-header">
+          <h3>✏️ Öğrenci Bilgilerini Düzenle</h3>
+          <button onclick="planlanmayanDuzenleKapat()" class="modal-close">✕</button>
+        </div>
+        
+        <div style="padding:1.5rem;">
+          <!-- Öğrenci Bilgisi -->
+          <div style="background:var(--bg-main); padding:1rem; border-radius:var(--radius); margin-bottom:1.5rem;">
+            <div style="font-size:1.1rem; font-weight:600; color:var(--primary); margin-bottom:0.5rem;" id="planlanmayanDuzenleAd">
+              Öğrenci Adı
+            </div>
+            <div style="font-size:0.9rem; color:var(--text-secondary);" id="planlanmayanDuzenleTel">
+              📱 05XX XXX XXXX
+            </div>
+          </div>
+
+          <!-- Uyarı Mesajı -->
+          <div style="background:rgba(251,191,36,0.1); border-left:4px solid var(--warning); padding:1rem; margin-bottom:1.5rem; border-radius:4px;">
+            <div style="font-weight:600; color:var(--warning); margin-bottom:0.5rem;">⚠️ Dikkat!</div>
+            <div style="font-size:0.9rem; color:var(--text-secondary);">
+              Bu öğrenci için yeni gün ve saat seçerek programa ekleme yapabilirsiniz.
+            </div>
+          </div>
+
+          <!-- Gün Seçimi -->
+          <div class="form-group">
+            <label>📅 Yeni Gün:</label>
+            <select id="planlanmayanDuzenleGun" class="form-control">
+              <option value="Pazartesi">Pazartesi</option>
+              <option value="Salı">Salı</option>
+              <option value="Çarşamba">Çarşamba</option>
+              <option value="Perşembe">Perşembe</option>
+              <option value="Cuma">Cuma</option>
+              <option value="Cumartesi">Cumartesi</option>
+            </select>
+          </div>
+
+          <!-- Saat Seçimi -->
+          <div class="form-group">
+            <label>⏰ Yeni Saat:</label>
+            <select id="planlanmayanDuzenleSaat" class="form-control">
+              <option value="08:00">08:00</option>
+              <option value="09:00">09:00</option>
+              <option value="10:00">10:00</option>
+              <option value="11:00">11:00</option>
+              <option value="13:00">13:00</option>
+              <option value="14:00">14:00</option>
+              <option value="15:00">15:00</option>
+              <option value="16:00">16:00</option>
+              <option value="17:00">17:00</option>
+            </select>
+          </div>
+
+          <!-- Bilgilendirme -->
+          <div style="background:rgba(16,185,129,0.1); border-left:4px solid var(--success); padding:1rem; margin-bottom:1.5rem; border-radius:4px;">
+            <div style="font-size:0.85rem; color:var(--text-secondary);">
+              💡 Seçilen gün ve saatte öğrenci programa eklenecektir. Bu işlem sonrası haftalık takvimde görünecektir.
+            </div>
+          </div>
+
+          <!-- Butonlar -->
+          <div style="display:flex; gap:0.75rem; margin-top:1.5rem;">
+            <button onclick="planlanmayanKaydet()" class="btn btn-success" style="flex:1;">
+              💾 Programa Ekle
+            </button>
+            <button onclick="planlanmayanDuzenleKapat()" class="btn btn-secondary" style="width:auto; padding:0.75rem 1.5rem;">
+              ❌ İptal
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   </section>
