@@ -254,8 +254,7 @@ async function uygunlukKaydet(e) {
     alert('❌ Kayıt sırasında hata: ' + error.message);
   }
 }    
-    ogrenciUygunluklariniGoster();
-  
+
 
 
 function ogrenciUygunluklariniGoster() {
@@ -265,7 +264,7 @@ function ogrenciUygunluklariniGoster() {
   const ogrenciKayitlari = uygunluklar.filter(u => u.ogrenciId === mevcutOgrenci.ogrenciId);
   
   if (ogrenciKayitlari.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="3" class="empty-state">Henüz uygunluk bildirmediniz.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="4" class="empty-state">Henüz uygunluk bildirmediniz.</td></tr>';
     return;
   }
   
@@ -276,22 +275,90 @@ function ogrenciUygunluklariniGoster() {
       '<span class="badge badge-success">✔ Tüm Gün</span>' : 
       kayit.saatler.sort().join(', ');
     
-    const durumBadge = kayit.planlandi ? 
-      '<span class="badge badge-success">✅ Planlandı</span>' : 
-      '<span class="badge badge-warning">⏳ Bekliyor</span>';
+    // Atanan ders bilgisi
+    let atananDersHtml = '';
+    if (kayit.planlandi && kayit.planlandigiSaat) {
+      atananDersHtml = `
+        <div style="background:#d1fae5; border-left:3px solid #10b981; padding:0.4rem 0.6rem; border-radius:4px; display:inline-block;">
+          <span style="font-weight:700; color:#065f46;">✅ ${kayit.gun}</span><br>
+          <span style="font-weight:700; color:#065f46; font-size:1.05rem;">⏰ ${kayit.planlandigiSaat}</span>
+        </div>`;
+    } else {
+      atananDersHtml = '<span class="badge badge-warning">⏳ Henüz atanmadı</span>';
+    }
     
     satirlar.push(`
       <tr>
         <td><strong>${kayit.gun}</strong></td>
         <td>${saatStr}</td>
+        <td>${atananDersHtml}</td>
         <td>
-          <button onclick="uygunlukSil('${kayit.gun}')" class="btn btn-sm btn-danger">🗑️ Sil</button>
+          <div style="display:flex; gap:0.4rem; flex-wrap:wrap;">
+            <button onclick="ogrenciUygunlukDuzenle('${kayit.gun}')" class="btn btn-sm btn-warning" title="Düzenle">✏️ Düzenle</button>
+            <button onclick="uygunlukSil('${kayit.gun}')" class="btn btn-sm btn-danger" title="Sil">🗑️ Sil</button>
+          </div>
         </td>
       </tr>
     `);
   });
   
   tbody.innerHTML = satirlar.join('');
+}
+
+function ogrenciUygunlukDuzenle(gun) {
+  if (!mevcutOgrenci) return;
+  
+  const kayit = uygunluklar.find(u => u.ogrenciId === mevcutOgrenci.ogrenciId && u.gun === gun);
+  if (!kayit) return;
+  
+  // Eğer ders planlanmışsa uyar
+  if (kayit.planlandi) {
+    if (!confirm(`⚠️ Bu günün dersi hoca tarafından planlanmıştır!\n\n📅 ${gun} - ⏰ ${kayit.planlandigiSaat}\n\nYine de düzenlemek istiyor musunuz? Planlama sıfırlanacak.`)) {
+      return;
+    }
+  }
+  
+  // Formu o günle doldur
+  document.getElementById('gun').value = gun;
+  
+  // Mevcut saatleri seç
+  document.querySelectorAll('input[name="saatler"]').forEach(cb => {
+    cb.checked = kayit.saatler.includes(cb.value);
+    const label = cb.closest('.time-checkbox');
+    if (label) {
+      if (cb.checked) {
+        label.style.borderColor = 'var(--primary)';
+        label.style.background = 'rgba(30, 58, 95, 0.1)';
+      } else {
+        label.style.borderColor = 'var(--border)';
+        label.style.background = 'var(--bg-card)';
+      }
+    }
+  });
+  
+  // Radio seç
+  if (kayit.tip === 'tumGun') {
+    document.getElementById('tumGunRadio').checked = true;
+    document.getElementById('saatSecimDiv').style.display = 'none';
+    document.getElementById('tumGunLabel').style.borderColor = 'var(--primary)';
+    document.getElementById('tumGunLabel').style.background = 'rgba(30, 58, 95, 0.05)';
+    document.getElementById('saatBazliLabel').style.borderColor = 'var(--border)';
+    document.getElementById('saatBazliLabel').style.background = 'transparent';
+  } else {
+    document.getElementById('saatBazliRadio').checked = true;
+    document.getElementById('saatSecimDiv').style.display = 'block';
+    document.getElementById('saatBazliLabel').style.borderColor = 'var(--primary)';
+    document.getElementById('saatBazliLabel').style.background = 'rgba(30, 58, 95, 0.05)';
+    document.getElementById('tumGunLabel').style.borderColor = 'var(--border)';
+    document.getElementById('tumGunLabel').style.background = 'transparent';
+  }
+  
+  // Formu yukarı kaydır
+  document.getElementById('formUygunluk').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  
+  // Kaydet butonunun metnini güncelle
+  const submitBtn = document.querySelector('#formUygunluk .btn[type="submit"]');
+  if (submitBtn) submitBtn.textContent = '💾 Güncelle';
 }
 
 function uygunlukSil(gun) {
@@ -1290,6 +1357,7 @@ document.addEventListener('DOMContentLoaded', async function() {
 
 // Global fonksiyonlar
 window.uygunlukSil = uygunlukSil;
+window.ogrenciUygunlukDuzenle = ogrenciUygunlukDuzenle;
 window.hocaSil = hocaSil;
 window.hocaCikis = hocaCikis;
 window.ogrenciCikis = ogrenciCikis;
