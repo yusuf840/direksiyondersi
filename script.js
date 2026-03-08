@@ -26,6 +26,90 @@ let uygunluklar = [];
 let mevcutOgrenci = null;
 let gunlukMaxOgrenci = CONFIG.GUNLUK_MAX;
 
+// Haftalik ders limiti (ogrenci basi, varsayilan 1)
+let haftalikDersLimiti = parseInt(localStorage.getItem('haftalikDersLimiti') || '1');
+
+function haftalikLimitiKaydet(yeniLimit) {
+  haftalikDersLimiti = yeniLimit;
+  localStorage.setItem('haftalikDersLimiti', String(yeniLimit));
+  limitGostergeyiGuncelle();
+}
+
+function limitGostergeyiGuncelle() {
+  const el = document.getElementById('limitGostergeDeger');
+  if (el) el.textContent = haftalikDersLimiti;
+  
+  // Aktif limit butonunu vurgula
+  document.querySelectorAll('.limit-btn').forEach(btn => {
+    btn.classList.toggle('active', parseInt(btn.dataset.val) === haftalikDersLimiti);
+  });
+  
+  // Ogrenci ekranindaki limit bilgisini guncelle
+  ogrenciLimitBilgisiniGuncelle();
+}
+
+function ogrenciLimitBilgisiniGuncelle() {
+  const kutu = document.getElementById('ogrenciLimitBilgi');
+  if (!kutu) return;
+  
+  kutu.style.display = 'block';
+  kutu.textContent = `Bu hafta en fazla ${haftalikDersLimiti} ders icin uygunluk bildirebilirsiniz.`;
+}
+
+function dersLimitiAyarla() {
+  document.getElementById('dersLimitiInput').value = haftalikDersLimiti;
+  limitAciklamasiniGuncelle(haftalikDersLimiti);
+  limitGostergeyiGuncelle();
+  document.getElementById('dersLimitiModal').style.display = 'flex';
+}
+
+function dersLimitiKapat() {
+  document.getElementById('dersLimitiModal').style.display = 'none';
+}
+
+function dersLimitiKaydet() {
+  const input = document.getElementById('dersLimitiInput');
+  const yeniLimit = parseInt(input.value);
+  
+  if (isNaN(yeniLimit) || yeniLimit < 1 || yeniLimit > 6) {
+    alert('Lutfen 1 ile 6 arasinda bir deger girin!');
+    return;
+  }
+  
+  haftalikLimitiKaydet(yeniLimit);
+  dersLimitiKapat();
+  alert('Haftalik ders limiti ' + yeniLimit + ' olarak kaydedildi.');
+}
+
+function limitHizliSec(deger) {
+  document.getElementById('dersLimitiInput').value = deger;
+  limitAciklamasiniGuncelle(deger);
+  document.querySelectorAll('.limit-btn').forEach(btn => {
+    btn.classList.toggle('active', parseInt(btn.dataset.val) === deger);
+  });
+}
+
+function limitAciklamasiniGuncelle(deger) {
+  const aciklama = document.getElementById('limitAciklama');
+  if (!aciklama) return;
+  
+  const aciklamalar = {
+    1: 'Her ogrenci haftada sadece 1 ders alabilir. En yogun planlama icin uygundur.',
+    2: 'Her ogrenci haftada 2 ders alabilir. Orta yogunlukta ilerleme saglar.',
+    3: 'Her ogrenci haftada 3 ders alabilir. Hizli ilerleme icin idealdir.',
+    4: 'Her ogrenci haftada 4 ders alabilir. Yogun program.',
+    5: 'Her ogrenci haftada 5 ders alabilir. Cok yogun program.',
+    6: 'Her ogrenci haftada 6 ders alabilir. Haftalik maksimum kapasite.'
+  };
+  
+  aciklama.textContent = aciklamalar[deger] || `Her ogrenci haftada ${deger} ders alabilir.`;
+}
+
+window.dersLimitiAyarla = dersLimitiAyarla;
+window.dersLimitiKapat = dersLimitiKapat;
+window.dersLimitiKaydet = dersLimitiKaydet;
+window.limitHizliSec = limitHizliSec;
+
 // Firebase Veri Yönetimi
 function veriYukle() {
   return new Promise((resolve, reject) => {
@@ -115,6 +199,8 @@ function temaYukle() {
   const kayitliTema = localStorage.getItem("theme") || "light";
   document.documentElement.setAttribute("data-theme", kayitliTema);
   temaIkonGuncelle(kayitliTema);
+  // Limit gostergesini baslat
+  limitGostergeyiGuncelle();
 }
 
 function temaIkonGuncelle(tema) {
@@ -163,6 +249,7 @@ function ogrenciGiris(ad, tel, beniHatirla) {
   document.getElementById('ogrenciAdi').value = ad;
   document.getElementById('telefon').value = tel;
   
+  ogrenciLimitBilgisiniGuncelle();
   veriYukle();
   ogrenciUygunluklariniGoster();
 }
@@ -729,51 +816,67 @@ async function otomatikPlanOlustur() {
   veriYukle();
   
   if (uygunluklar.length === 0) {
-    return alert('⚠️ Henüz öğrenci yok!');
+    return alert('Henuz ogrenci yok!');
   }
   
-  if (!confirm(`📋 ${uygunluklar.length} uygunluk için planlama yapılacak.\n\nDevam?`)) {
+  if (!confirm(`${uygunluklar.length} uygunluk icin planlama yapilacak.\n\nHaftalik ders limiti: ${haftalikDersLimiti} ders/ogrenci\n\nDevam?`)) {
     return;
   }
   
   const rapor = { basarili: [], basarisiz: [], toplam: 0 };
-  const atananlar = new Set();
-  const gunlukSlotKullanimi = {}; // Her gün için kullanılan slotları takip et
   
+  // Haftalik limit takibi: ogrenciId -> kac ders atandi
+  const ogrenciHaftalikDersSayisi = {};
+  
+  const gunlukSlotKullanimi = {};
   CONFIG.GUNLER.forEach(gun => {
     gunlukSlotKullanimi[gun] = {};
     CONFIG.SLOTLAR.forEach(saat => {
-      gunlukSlotKullanimi[gun][saat] = null; // null = boş
+      gunlukSlotKullanimi[gun][saat] = null;
     });
   });
   
   CONFIG.GUNLER.forEach(gun => {
     let gunlukSayisi = 0;
     
-    // Bu güne uygun olan öğrencileri filtrele ve sırala
     const uygunOgrenciler = uygunluklar
-      .filter(u => u.gun === gun && !atananlar.has(u.ogrenciId))
+      .filter(u => u.gun === gun)
       .sort((a, b) => {
-        // 1. Öncelik: Az seçeneği olana
+        // 1. Oncelik: Az secenegi olana
         if (a.saatler.length !== b.saatler.length) {
           return a.saatler.length - b.saatler.length;
         }
-        // 2. Tie-breaker: Daha erken kayıt yapana
+        // 2. Tie-breaker: Daha erken kayit yapana
         return new Date(a.kayitTarihi) - new Date(b.kayitTarihi);
       });
     
     uygunOgrenciler.forEach(ogrenci => {
+      // Bu ogrencinin bu haftaki toplam ders sayisini kontrol et
+      const mevcutDersSayisi = ogrenciHaftalikDersSayisi[ogrenci.ogrenciId] || 0;
+      
+      if (mevcutDersSayisi >= haftalikDersLimiti) {
+        // Haftalik limite ulasildi, bu ogrenci icin daha fazla ders planlanamaz
+        rapor.basarisiz.push({
+          ad: ogrenci.ad,
+          tel: ogrenci.tel,
+          gun,
+          neden: `Haftalik ders limitine ulasildi (maks ${haftalikDersLimiti} ders/hafta). Bu ogrenciye zaten ${mevcutDersSayisi} ders atandi.`,
+          secilenSaatler: ogrenci.saatler.join(', ')
+        });
+        return;
+      }
+      
       if (gunlukSayisi >= gunlukMaxOgrenci) {
         rapor.basarisiz.push({
           ad: ogrenci.ad,
           tel: ogrenci.tel,
           gun,
-          neden: `Günlük limit aşıldı (maks ${gunlukMaxOgrenci} öğrenci/gün)`
+          neden: `Gunluk kapasite doldu (maks ${gunlukMaxOgrenci} ogrenci/gun)`
         });
         return;
       }
       
-      // Uygun boş slot bul
+      // Uygun bos slot bul
       const uygunBosSlot = ogrenci.saatler.find(saat => 
         gunlukSlotKullanimi[gun][saat] === null
       );
@@ -781,9 +884,8 @@ async function otomatikPlanOlustur() {
       if (uygunBosSlot) {
         gunlukSlotKullanimi[gun][uygunBosSlot] = ogrenci.ogrenciId;
         gunlukSayisi++;
-        atananlar.add(ogrenci.ogrenciId);
+        ogrenciHaftalikDersSayisi[ogrenci.ogrenciId] = mevcutDersSayisi + 1;
         
-        // Planlandı olarak işaretle
         ogrenci.planlandi = true;
         ogrenci.planlandigiSaat = uygunBosSlot;
         
@@ -794,7 +896,6 @@ async function otomatikPlanOlustur() {
           saat: uygunBosSlot
         });
       } else {
-        // Detaylı neden bul
         let detayliNeden = '';
         
         if (ogrenci.saatler.length === 1) {
@@ -802,13 +903,13 @@ async function otomatikPlanOlustur() {
           const kullanan = gunlukSlotKullanimi[gun][tekSaat];
           if (kullanan) {
             const digerOgrenci = uygunluklar.find(u => u.ogrenciId === kullanan);
-            detayliNeden = `Seçtiği tek saat (${tekSaat}) ${digerOgrenci ? digerOgrenci.ad : 'başka öğrenci'} tarafından alındı`;
+            detayliNeden = `Sectigi tek saat (${tekSaat}) ${digerOgrenci ? digerOgrenci.ad : 'baska ogrenci'} tarafindan alindi`;
           } else {
-            detayliNeden = `Seçtiği saat (${tekSaat}) uygun değil`;
+            detayliNeden = `Sectigi saat (${tekSaat}) uygun degil`;
           }
         } else {
           const alinanSaatler = ogrenci.saatler.filter(s => gunlukSlotKullanimi[gun][s] !== null);
-          detayliNeden = `Tüm seçtiği saatler dolu (${ogrenci.saatler.length} saatten ${alinanSaatler.length}'i alındı)`;
+          detayliNeden = `Tum sectigi saatler dolu (${ogrenci.saatler.length} saatten ${alinanSaatler.length}'i alindi)`;
         }
         
         rapor.basarisiz.push({
@@ -829,7 +930,7 @@ async function otomatikPlanOlustur() {
     planlamaRaporuGoster(rapor);
     hocaPaneliYukle();
   } catch (error) {
-    alert('❌ Planlama kaydetme hatası: ' + error.message);
+    alert('Planlama kaydetme hatasi: ' + error.message);
   }
 }
 
