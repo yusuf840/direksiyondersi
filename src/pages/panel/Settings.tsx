@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react'
-import { supabase } from '../../lib/supabase'
-import type { Business, Member, Resource, Service, TimeOff, WorkingHour } from '../../lib/types'
+import * as api from '../../lib/api'
+import { useAuth } from '../../lib/auth'
+import type { Business, Member, Resource, Service, TimeOff } from '../../lib/types'
 import { errText } from '../../lib/errors'
 import { displayPhone, normalizePhone } from '../../lib/phone'
-import { addDays, dayKeyOf, fmtDateTime, fmtDay, fmtTime, hhmm, minutesLabel, todayKey, WEEKDAYS_SHORT, zonedToDate } from '../../lib/time'
+import { addDays, dayKeyOf, fmtDateTime, fmtDay, fmtTime, minutesLabel, todayKey, WEEKDAYS_SHORT, zonedToDate } from '../../lib/time'
 import { slugify } from '../../lib/storage'
 import { Button, Chip, Empty, Field, Notice, Sheet, Toggle, useToast } from '../../components/ui'
 import { HoursEditor, emptyWeek, validateWeek, weekToRows, type WeekHours } from '../../components/HoursEditor'
@@ -62,9 +63,8 @@ function useSaveBusiness() {
   const [busy, setBusy] = useState(false)
   const save = async (patch: Partial<Business>) => {
     setBusy(true)
-    const { error } = await supabase.from('businesses').update(patch).eq('id', biz.id)
+    try { await api.updateBusiness(biz.id, patch) } catch (e) { setBusy(false); toast(errText(e), 'error'); return false }
     setBusy(false)
-    if (error) { toast(errText(error), 'error'); return false }
     toast('Kaydedildi', 'success'); await reload(); return true
   }
   return { save, busy }
@@ -156,7 +156,7 @@ function Rules() {
 
 // ------------------------------------------------------------------
 function Services() {
-  const { biz, services, resources, links, reload } = usePanel()
+  const { biz, services, resources, reload } = usePanel()
   const toast = useToast()
   const [edit, setEdit] = useState<Partial<Service> | null>(null)
   const [sel, setSel] = useState<string[]>([])
@@ -164,7 +164,7 @@ function Services() {
 
   function open(s: Partial<Service>) {
     setEdit(s)
-    setSel(s.id ? links.filter((l) => l.service_id === s.id).map((l) => l.resource_id) : [])
+    setSel(s.resource_ids ?? [])
   }
 
   async function save() {
@@ -172,27 +172,15 @@ function Services() {
     if (!edit.name?.trim()) { toast('Hizmet adı gerekli', 'error'); return }
     if (!edit.duration_min || edit.duration_min < 5) { toast('Süre en az 5 dakika olmalı', 'error'); return }
     setBusy(true)
-    const row = {
-      business_id: biz.id, name: edit.name.trim(), description: edit.description?.trim() || null,
-      duration_min: edit.duration_min, buffer_min: edit.buffer_min ?? 0, slot_interval_min: edit.slot_interval_min || null,
-      price_text: edit.price_text?.trim() || null, is_active: edit.is_active ?? true,
-    }
-    const res = edit.id
-      ? await supabase.from('services').update(row).eq('id', edit.id).select().single()
-      : await supabase.from('services').insert({ ...row, sort: services.length }).select().single()
-    if (res.error) { setBusy(false); toast(errText(res.error), 'error'); return }
-    const sid = res.data.id as string
-    await supabase.from('service_resources').delete().eq('service_id', sid)
-    if (sel.length && sel.length < resources.length) {
-      await supabase.from('service_resources').insert(sel.map((rid) => ({ business_id: biz.id, service_id: sid, resource_id: rid })))
-    }
+    try {
+      await api.saveService(biz.id, { ...edit, resource_ids: sel.length < resources.length ? sel : [] }, services.length)
+    } catch (e) { setBusy(false); toast(errText(e), 'error'); return }
     setBusy(false); setEdit(null); toast('Kaydedildi', 'success'); void reload()
   }
 
   async function remove() {
     if (!edit?.id || !confirm('Hizmet silinsin mi? Geçmiş randevular silinmez.')) return
-    const { error } = await supabase.from('services').delete().eq('id', edit.id)
-    if (error) { toast(errText(error), 'error'); return }
+    try { await api.deleteService(biz.id, edit.id) } catch (e) { toast(errText(e), 'error'); return }
     setEdit(null); void reload()
   }
 
@@ -243,21 +231,14 @@ function Services() {
 function Resources() {
   const { biz, resources, reload } = usePanel()
   const toast = useToast()
-  const [hours, setHours] = useState<WorkingHour[]>([])
   const [edit, setEdit] = useState<Partial<Resource> | null>(null)
   const [week, setWeek] = useState<WeekHours>(emptyWeek)
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState<string | null>(null)
 
-  const loadHours = useCallback(async () => {
-    const { data } = await supabase.from('working_hours').select('*').eq('business_id', biz.id).order('start_time')
-    setHours((data ?? []) as WorkingHour[])
-  }, [biz.id])
-  useEffect(() => { void loadHours() }, [loadHours])
-
   function open(r: Partial<Resource>) {
     const w = emptyWeek()
-    for (const h of hours.filter((x) => x.resource_id === r.id)) w[h.weekday].push({ start: hhmm(h.start_time), end: hhmm(h.end_time) })
+    for (const h of [...(r.hours ?? [])].sort((a, b) => a.start.localeCompare(b.start))) w[h.weekday].push({ start: h.start, end: h.end })
     setWeek(w); setEdit(r); setErr(null)
   }
 
@@ -267,25 +248,16 @@ function Resources() {
     const v = validateWeek(week)
     if (v && edit.is_active !== false) return setErr(v)
     setBusy(true); setErr(null)
-    const res = edit.id
-      ? await supabase.from('resources').update({ name: edit.name.trim(), is_active: edit.is_active ?? true }).eq('id', edit.id).select().single()
-      : await supabase.from('resources').insert({ business_id: biz.id, name: edit.name.trim(), sort: resources.length }).select().single()
-    if (res.error) { setBusy(false); return setErr(errText(res.error)) }
-    const { error } = await supabase.rpc('set_working_hours', { p_resource: res.data.id, p_hours: weekToRows(week) })
+    try {
+      // Ad, durum ve haftalık saatler tek belgede: tek seferde kaydolur, yarım kayıt kalmaz
+      await api.saveResource(biz.id, { id: edit.id, name: edit.name, is_active: edit.is_active ?? true, sort: edit.sort ?? resources.length, hours: weekToRows(week) })
+    } catch (e) { setBusy(false); return setErr(errText(e)) }
     setBusy(false)
-    if (error) return setErr(/HOURS_OVERLAP/.test(error.message) ? 'Aynı gün içinde aralıklar üst üste biniyor.' : errText(error))
-    toast('Kaydedildi', 'success'); setEdit(null); void loadHours(); void reload()
-  }
-
-  async function remove() {
-    if (!edit?.id || !confirm('Silinsin mi?')) return
-    const { error } = await supabase.from('resources').delete().eq('id', edit.id)
-    if (error) { toast('Geçmiş randevusu olduğu için silinemez; bunun yerine pasif yapın.', 'error'); return }
-    setEdit(null); void reload()
+    toast('Kaydedildi', 'success'); setEdit(null); void reload()
   }
 
   const summary = (rid: string) => {
-    const hs = hours.filter((h) => h.resource_id === rid)
+    const hs = resources.find((r) => r.id === rid)?.hours ?? []
     if (!hs.length) return 'Saat girilmemiş'
     const days = [...new Set(hs.map((h) => h.weekday))].sort()
     return days.map((d) => WEEKDAYS_SHORT[d - 1]).join(', ')
@@ -302,10 +274,10 @@ function Resources() {
         ))}
       </div>
       <Button variant="secondary" onClick={() => open({ is_active: true })}>+ {biz.resource_label} ekle</Button>
-      <p className="muted small">Her biri ayrı takvimdir: aynı saatte iki müşteri ancak iki ayrı {biz.resource_label.toLocaleLowerCase('tr-TR')} varsa randevu alabilir.</p>
+      <p className="muted small">Silmek yerine “Randevu alabilir” düğmesini kapatın; geçmiş kayıtlar korunur. Her biri ayrı takvimdir: aynı saatte iki müşteri ancak iki ayrı {biz.resource_label.toLocaleLowerCase('tr-TR')} varsa randevu alabilir.</p>
 
       <Sheet open={!!edit} onClose={() => setEdit(null)} title={edit?.id ? edit.name ?? '' : `Yeni ${biz.resource_label.toLocaleLowerCase('tr-TR')}`}
-        footer={<div className="actions">{edit?.id ? <Button variant="ghost" className="danger" onClick={() => void remove()}>Sil</Button> : null}<Button loading={busy} onClick={() => void save()}>Kaydet</Button></div>}>
+        footer={<div className="actions"><Button loading={busy} onClick={() => void save()}>Kaydet</Button></div>}>
         {edit ? (
           <div className="stack">
             <Field label="Ad"><input className="input" value={edit.name ?? ''} onChange={(e) => setEdit({ ...edit, name: e.target.value })} /></Field>
@@ -332,8 +304,7 @@ function TimeOffs() {
   const [err, setErr] = useState<string | null>(null)
 
   const load = useCallback(async () => {
-    const { data } = await supabase.from('time_off').select('*').eq('business_id', biz.id).gte('ends_at', new Date().toISOString()).order('starts_at')
-    setList((data ?? []) as TimeOff[])
+    setList(await api.listTimeOff(biz.id).catch(() => [] as TimeOff[]))
   }, [biz.id])
   useEffect(() => { void load() }, [load])
 
@@ -351,19 +322,16 @@ function TimeOffs() {
     }
     setBusy(true)
     // Bu aralıkta zaten randevu var mı? Uyar ama engelleme (mevcut randevular kendiliğinden iptal olmaz).
-    const { count } = await supabase.from('bookings').select('id', { count: 'exact', head: true }).eq('business_id', biz.id)
-      .in('status', ['pending', 'confirmed']).lt('starts_at', e.toISOString()).gt('ends_at', s.toISOString())
-      .match(f.resource_id ? { resource_id: f.resource_id } : {})
+    const count = await api.countActiveOverlapping(biz.id, s, e, f.resource_id || null).catch(() => 0)
     if (count && !confirm(`Bu aralıkta ${count} aktif randevu var. Kapalı zaman eklenecek ama o randevular iptal edilmeyecek; ajandadan tek tek iptal edip müşterilere haber verebilirsiniz. Devam?`)) { setBusy(false); return }
-    const { error } = await supabase.from('time_off').insert({ business_id: biz.id, resource_id: f.resource_id || null, starts_at: s.toISOString(), ends_at: e.toISOString(), reason: f.reason.trim() || null })
+    try { await api.addTimeOff(biz.id, { resource_id: f.resource_id || null, starts_at: s, ends_at: e, reason: f.reason.trim() || null }) } catch (er) { setBusy(false); return setErr(errText(er)) }
     setBusy(false)
-    if (error) return setErr(errText(error))
     toast('Eklendi', 'success'); setAdding(false); void load()
   }
 
   async function remove(id: string) {
     if (!confirm('Kaldırılsın mı?')) return
-    await supabase.from('time_off').delete().eq('id', id); void load()
+    await api.deleteTimeOff(biz.id, id).catch((e) => toast(errText(e), 'error')); void load()
   }
 
   const label = (t: TimeOff) => {
@@ -421,43 +389,43 @@ function TimeOffs() {
 // ------------------------------------------------------------------
 function Team() {
   const { biz, resources } = usePanel()
+  const { session } = useAuth()
   const toast = useToast()
   const [members, setMembers] = useState<Member[]>([])
   const [invite, setInvite] = useState<string | null>(null)
   const [invRes, setInvRes] = useState('')
 
   const load = useCallback(async () => {
-    const { data } = await supabase.rpc('list_members', { p_business: biz.id })
-    setMembers((data ?? []) as Member[])
+    setMembers(await api.listMembers(biz.id).catch(() => [] as Member[]))
   }, [biz.id])
   useEffect(() => { void load() }, [load])
 
   async function create() {
-    const { data: u } = await supabase.auth.getUser()
-    const { data, error } = await supabase.from('business_invites').insert({ business_id: biz.id, resource_id: invRes || null, created_by: u.user!.id }).select('code').single()
-    if (error) { toast(errText(error), 'error'); return }
-    setInvite(`${location.origin}/katil/${data.code}`)
+    try {
+      const code = await api.createInvite(biz.id, invRes || null, session!.uid)
+      setInvite(`${location.origin}/katil/${code}`)
+    } catch (e) { toast(errText(e), 'error') }
   }
 
   async function setRes(uid: string, rid: string) {
-    await supabase.from('business_members').update({ resource_id: rid || null }).eq('business_id', biz.id).eq('user_id', uid); void load()
+    await api.setMemberResource(biz.id, uid, rid || null).catch((e) => toast(errText(e), 'error')); void load()
   }
   async function remove(uid: string) {
     if (!confirm('Ekipten çıkarılsın mı?')) return
-    await supabase.from('business_members').delete().eq('business_id', biz.id).eq('user_id', uid); void load()
+    await api.removeMember(biz.id, uid).catch((e) => toast(errText(e), 'error')); void load()
   }
 
   return (
     <div className="stack">
       <div className="list">
         {members.map((m) => (
-          <div key={m.user_id} className="list-row">
+          <div key={m.uid} className="list-row">
             <span><strong>{m.full_name ?? '—'}</strong><span className="muted small"> · {m.role === 'owner' ? 'Sahip' : 'Ekip'} · {displayPhone(m.phone)}</span></span>
             <span className="row-gap">
-              <select className="input input-sm" value={m.resource_id ?? ''} onChange={(e) => void setRes(m.user_id, e.target.value)} aria-label={biz.resource_label}>
+              <select className="input input-sm" value={m.resource_id ?? ''} onChange={(e) => void setRes(m.uid, e.target.value)} aria-label={biz.resource_label}>
                 <option value="">—</option>{resources.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
               </select>
-              {m.role !== 'owner' ? <button className="icon-btn" aria-label="Çıkar" onClick={() => void remove(m.user_id)}>✕</button> : null}
+              {m.role !== 'owner' ? <button className="icon-btn" aria-label="Çıkar" onClick={() => void remove(m.uid)}>✕</button> : null}
             </span>
           </div>
         ))}
@@ -495,13 +463,12 @@ function Export() {
 
   async function csv() {
     setBusy(true)
-    const { data } = await supabase.from('bookings').select('*, customer:customers(name, phone)').eq('business_id', biz.id)
-      .gte('starts_at', zonedToDate(from, '00:00', tz).toISOString()).lt('starts_at', zonedToDate(addDays(to, 1), '00:00', tz).toISOString()).order('starts_at')
+    const data = await api.listBookings(biz.id, zonedToDate(from, '00:00', tz).toISOString(), zonedToDate(addDays(to, 1), '00:00', tz).toISOString()).catch(() => [])
     setBusy(false)
     const STATUS: Record<string, string> = { pending: 'Bekliyor', confirmed: 'Onaylı', cancelled: 'İptal', rejected: 'Ret', completed: 'Geldi', no_show: 'Gelmedi' }
     const rows = [['Tarih', 'Başlangıç', 'Bitiş', 'Müşteri', 'Telefon', 'Hizmet', biz.resource_label, 'Durum', 'Kaynak', 'Müşteri notu', 'Ekip notu']]
     for (const b of data ?? []) rows.push([
-      dayKeyOf(b.starts_at, tz), fmtTime(b.starts_at, tz), fmtTime(b.ends_at, tz), b.customer?.name ?? '', displayPhone(b.customer?.phone),
+      dayKeyOf(b.starts_at, tz), fmtTime(b.starts_at, tz), fmtTime(b.ends_at, tz), b.customer_name, displayPhone(b.customer_phone),
       b.service_name, resources.find((r) => r.id === b.resource_id)?.name ?? '', STATUS[b.status] ?? b.status,
       b.source === 'staff' ? 'Elle' : 'Çevrim içi', b.customer_note ?? '', b.staff_note ?? '',
     ])

@@ -1,7 +1,7 @@
 import { lazy, Suspense } from 'react'
 import { BrowserRouter, Link, Route, Routes, useLocation } from 'react-router-dom'
 import { AuthProvider, useAuth } from './lib/auth'
-import { APP_NAME, isConfigured } from './lib/supabase'
+import { APP_NAME, isConfigured } from './lib/firebase'
 import { Spinner, ThemeToggle, ToastProvider } from './components/ui'
 import Home from './pages/Home'
 import Book from './pages/Book'
@@ -38,8 +38,8 @@ function NotConfigured() {
   return (
     <div className="page narrow prose">
       <h1>Kurulum gerekli</h1>
-      <p><code>VITE_SUPABASE_URL</code> ve <code>VITE_SUPABASE_ANON_KEY</code> ortam değişkenleri tanımlı değil.</p>
-      <p>README dosyasındaki “Kurulum” adımlarını izleyin (Supabase projesi + Vercel ortam değişkenleri).</p>
+      <p>Firebase ortam değişkenleri (<code>VITE_FIREBASE_API_KEY</code>, <code>VITE_FIREBASE_PROJECT_ID</code> …) tanımlı değil.</p>
+      <p>README dosyasındaki “Kurulum” adımlarını izleyin.</p>
     </div>
   )
 }

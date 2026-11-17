@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
-import { supabase } from '../lib/supabase'
+import { RecaptchaVerifier, signInWithPhoneNumber, type ConfirmationResult } from 'firebase/auth'
+import { auth } from '../lib/firebase'
+import { updateMyName } from '../lib/api'
 import { useAuth } from '../lib/auth'
 import { errText } from '../lib/errors'
 import { displayPhone, isTrMobile, normalizePhone } from '../lib/phone'
@@ -21,6 +23,11 @@ export function PhoneLogin({ onDone, intro }: { onDone: () => void; intro?: stri
   const [error, setError] = useState<string | null>(null)
   const [resendIn, setResendIn] = useState(0)
   const codeRef = useRef<HTMLInputElement>(null)
+  const confirmation = useRef<ConfirmationResult | null>(null)
+  const verifier = useRef<RecaptchaVerifier | null>(null)
+
+  // Görünmez reCAPTCHA: botların SMS göndermesini engeller (Firebase zorunlu tutar)
+  useEffect(() => () => { verifier.current?.clear(); verifier.current = null }, [])
 
   // Oturum açık ve ad biliniyorsa doğrudan bitir
   useEffect(() => {
@@ -38,9 +45,15 @@ export function PhoneLogin({ onDone, intro }: { onDone: () => void; intro?: stri
     setError(null)
     if (!isTrMobile(phone)) { setError('05 ile başlayan 11 haneli cep numaranızı girin.'); return }
     setBusy(true)
-    const { error } = await supabase.auth.signInWithOtp({ phone: normalizePhone(phone)! })
+    try {
+      verifier.current ??= new RecaptchaVerifier(auth, 'recaptcha-box', { size: 'invisible' })
+      confirmation.current = await signInWithPhoneNumber(auth, normalizePhone(phone)!, verifier.current)
+    } catch (e) {
+      setBusy(false); setError(errText(e))
+      verifier.current?.clear(); verifier.current = null
+      return
+    }
     setBusy(false)
-    if (error) { setError(errText(error)); return }
     save('lastPhone', phone)
     setStep('code'); setResendIn(60); setCode('')
     setTimeout(() => codeRef.current?.focus(), 50)
@@ -49,10 +62,10 @@ export function PhoneLogin({ onDone, intro }: { onDone: () => void; intro?: stri
   async function verify(token = code) {
     setError(null)
     if (token.length < 6) return
+    if (!confirmation.current) { setStep('phone'); return }
     setBusy(true)
-    const { error } = await supabase.auth.verifyOtp({ phone: normalizePhone(phone)!, token, type: 'sms' })
+    try { await confirmation.current.confirm(token) } catch (e) { setBusy(false); setError(errText(e)); setCode(''); return }
     setBusy(false)
-    if (error) { setError(errText(error)); setCode(''); return }
     // profil yüklenince useEffect ya bitirir ya da ad sorar
   }
 
@@ -60,9 +73,8 @@ export function PhoneLogin({ onDone, intro }: { onDone: () => void; intro?: stri
     setError(null)
     if (name.trim().length < 2) { setError('Adınızı ve soyadınızı yazın.'); return }
     setBusy(true)
-    const { error } = await supabase.rpc('update_my_name', { p_name: name.trim() })
+    try { await updateMyName(name.trim()) } catch (e) { setBusy(false); setError(errText(e)); return }
     setBusy(false)
-    if (error) { setError(errText(error)); return }
     await refreshProfile()
     onDone()
   }
@@ -75,6 +87,7 @@ export function PhoneLogin({ onDone, intro }: { onDone: () => void; intro?: stri
           value={phone} onChange={(e) => setPhone(e.target.value)} autoFocus />
       </Field>
       <Button type="submit" loading={busy}>Kod gönder</Button>
+      <div id="recaptcha-box" />
     </form>
   )
 

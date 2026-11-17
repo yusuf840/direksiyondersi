@@ -1,0 +1,98 @@
+rules_version = '2';
+// Randevu — Firestore güvenlik kuralları
+// Randevu, müşteri kartı, işletme ayarı gibi kritik yazmalar Cloud Functions üzerinden yapılır.
+// İstemci sadece: herkese açık vitrini okur, ekip kendi işletmesini okur, sahip ayarlarını yazar.
+service cloud.firestore {
+  match /databases/{db}/documents {
+    function signedIn() { return request.auth != null; }
+    function memberDoc(b) { return /databases/$(db)/documents/businesses/$(b)/members/$(request.auth.uid); }
+    function isMember(b) { return signedIn() && exists(memberDoc(b)); }
+    function isOwner(b) { return signedIn() && exists(memberDoc(b)) && get(memberDoc(b)).data.role == 'owner'; }
+    function onlyKeys(keys) { return request.resource.data.keys().hasOnly(keys); }
+    function changed(keys) { return request.resource.data.diff(resource.data).affectedKeys().hasOnly(keys); }
+    function strMax(v, n) { return v is string && v.size() <= n; }
+    function optStr(v, n) { return v == null || strMax(v, n); }
+    function intIn(v, a, b) { return v is int && v >= a && v <= b; }
+
+    match /slugs/{slug} { allow read: if true; }
+    match /pulse/{b} { allow read: if true; }
+    match /users/{uid} { allow read: if signedIn() && request.auth.uid == uid; }
+    match /locks/{id} { allow read, write: if false; }
+
+    // "Üyesi olduğum işletmeler" sorgusu (collection group)
+    match /{path=**}/members/{uid} {
+      allow read: if signedIn() && resource.data.uid == request.auth.uid;
+    }
+
+    match /invites/{code} {
+      allow read, delete: if isOwner(resource.data.business_id);
+      allow create: if isOwner(request.resource.data.business_id)
+        && onlyKeys(['business_id', 'resource_id', 'created_by', 'expires_at', 'used_by', 'used_at'])
+        && request.resource.data.created_by == request.auth.uid
+        && request.resource.data.used_by == null
+        && request.resource.data.expires_at is timestamp
+        && request.resource.data.expires_at < request.time + duration.value(8, 'd');
+    }
+
+    match /businesses/{b} {
+      allow read: if true; // vitrin: ad, adres, kurallar (kişisel veri yok)
+
+      match /members/{uid} {
+        allow read: if isMember(b) || (signedIn() && request.auth.uid == uid);
+        allow update: if isOwner(b) && changed(['resource_id']);
+        allow delete: if isOwner(b) && resource.data.role != 'owner';
+      }
+
+      match /resources/{r} {
+        allow read: if true;
+        allow create, update: if isOwner(b)
+          && onlyKeys(['name', 'is_active', 'sort', 'hours'])
+          && strMax(request.resource.data.name, 60) && request.resource.data.name.size() > 0
+          && request.resource.data.is_active is bool
+          && request.resource.data.hours is list && request.resource.data.hours.size() <= 50;
+        // Silme yok: geçmiş randevular bozulmasın diye "pasif" yapılır
+      }
+
+      match /services/{s} {
+        allow read: if true;
+        allow create, update: if isOwner(b)
+          && onlyKeys(['name', 'description', 'duration_min', 'buffer_min', 'slot_interval_min', 'price_text', 'is_active', 'sort', 'resource_ids'])
+          && strMax(request.resource.data.name, 80) && request.resource.data.name.size() > 0
+          && optStr(request.resource.data.description, 300)
+          && optStr(request.resource.data.price_text, 40)
+          && intIn(request.resource.data.duration_min, 5, 1440)
+          && intIn(request.resource.data.buffer_min, 0, 240)
+          && (request.resource.data.slot_interval_min == null || intIn(request.resource.data.slot_interval_min, 5, 480))
+          && request.resource.data.is_active is bool
+          && request.resource.data.resource_ids is list;
+        allow delete: if isOwner(b);
+      }
+
+      // Kapalı zamanlar: ekip görür ve yönetir (personel kendi iznini girebilsin)
+      match /timeOff/{t} {
+        allow read, delete: if isMember(b);
+        allow create: if isMember(b)
+          && onlyKeys(['resource_id', 'starts_at', 'ends_at', 'reason'])
+          && request.resource.data.starts_at is timestamp && request.resource.data.ends_at is timestamp
+          && request.resource.data.ends_at > request.resource.data.starts_at
+          && optStr(request.resource.data.reason, 120);
+      }
+
+      // Müşteri kartları: sadece ekip. Doğrulanmış müşterinin telefonu değiştirilemez.
+      match /customers/{c} {
+        allow read: if isMember(b);
+        allow update: if isMember(b)
+          && changed(['name', 'note', 'is_blocked', 'phone'])
+          && strMax(request.resource.data.name, 80) && request.resource.data.name.size() > 0
+          && optStr(request.resource.data.note, 500)
+          && request.resource.data.is_blocked is bool
+          && (resource.data.user_id == null || request.resource.data.phone == resource.data.phone);
+      }
+
+      // Randevular: sadece ekip okur; yazma yalnızca Cloud Functions ile
+      match /bookings/{k} {
+        allow read: if isMember(b);
+      }
+    }
+  }
+}

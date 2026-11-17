@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { supabase } from '../lib/supabase'
+import { acceptInvite, invitePreview } from '../lib/api'
 import { useAuth } from '../lib/auth'
 import { errText } from '../lib/errors'
 import { save } from '../lib/storage'
@@ -16,17 +16,18 @@ export default function Join() {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  useEffect(() => { supabase.rpc('invite_preview', { p_code: code }).then(({ data }) => setInfo(data ?? null)) }, [code])
+  useEffect(() => { invitePreview(code).then((d) => setInfo(d ?? null), () => setInfo(null)) }, [code])
 
   if (info === undefined) return <Spinner />
   if (!info || !info.valid) return <div className="page narrow"><Empty title="Davet geçersiz">Bağlantının süresi dolmuş ya da kullanılmış olabilir. İşletme sahibinden yeni bir davet isteyin.</Empty></div>
 
   async function accept() {
     setBusy(true); setError(null)
-    const { data, error } = await supabase.rpc('accept_invite', { p_code: code })
+    try {
+      const r = await acceptInvite(code)
+      save('panelBusiness', r.businessId)
+    } catch (e) { setBusy(false); setError(errText(e)); return }
     setBusy(false)
-    if (error) { setError(errText(error)); return }
-    save('panelBusiness', data)
     nav('/panel', { replace: true })
   }
 

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { supabase } from '../../lib/supabase'
+import { availableSlots } from '../../lib/api'
 import type { Business, Slot } from '../../lib/types'
 import { fmtTime, zonedToDate } from '../../lib/time'
 import { Spinner } from '../../components/ui'
@@ -14,8 +14,8 @@ export function SlotPicker({ biz, serviceId, resourceId, day, value, onChange }:
   useEffect(() => {
     let off = false
     setSlots(null)
-    supabase.rpc('available_slots', { p_business: biz.id, p_service: serviceId, p_from: day, p_days: 1, p_resource: resourceId, p_ignore_rules: true })
-      .then(({ data }) => { if (!off) setSlots((data ?? []) as Slot[]) })
+    availableSlots({ businessId: biz.id, serviceId, from: day, days: 1, resourceId, ignoreRules: true })
+      .then((d) => { if (!off) setSlots(d) }, () => { if (!off) setSlots([]) })
     return () => { off = true }
   }, [biz.id, serviceId, resourceId, day])
 

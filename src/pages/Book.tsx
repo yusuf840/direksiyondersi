@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { supabase } from '../lib/supabase'
+import { availableSlots, book, getBusinessBySlug, myBookings, watchPulse } from '../lib/api'
 import { useAuth } from '../lib/auth'
 import type { Business, MyBooking, Resource, Service, ServiceResource, Slot } from '../lib/types'
 import { addDays, dayKeyOf, fmtDateTime, fmtDay, fmtTime, minutesLabel, relativeDay, todayKey } from '../lib/time'
@@ -47,21 +47,17 @@ export default function Book() {
     let off = false
     ;(async () => {
       setState('loading')
-      const { data: b } = await supabase.from('businesses').select('*').eq('slug', slug.toLowerCase()).maybeSingle()
+      const meta = await getBusinessBySlug(slug).catch(() => null)
       if (off) return
-      if (!b) { setState('missing'); return }
-      const [s, r, l] = await Promise.all([
-        supabase.from('services').select('*').eq('business_id', b.id).eq('is_active', true).order('sort').order('created_at'),
-        supabase.from('resources').select('*').eq('business_id', b.id).eq('is_active', true).order('sort').order('created_at'),
-        supabase.from('service_resources').select('*').eq('business_id', b.id),
-      ])
-      if (off) return
-      setBiz(b as Business)
-      setServices((s.data ?? []) as Service[])
-      setResources((r.data ?? []) as Resource[])
-      setLinks((l.data ?? []) as ServiceResource[])
+      if (!meta) { setState('missing'); return }
+      const b = meta.biz
+      const activeServices = meta.services.filter((x) => x.is_active)
+      setBiz(b)
+      setServices(activeServices)
+      setResources(meta.resources.filter((x) => x.is_active))
+      setLinks(meta.links)
       setWindowStart(todayKey(b.timezone))
-      if (s.data?.length === 1) setServiceId(s.data[0].id)
+      if (activeServices.length === 1) setServiceId(activeServices[0].id)
       setConsent(load(`consent:${b.id}`, false))
       setState('ready')
       rememberPlace({ slug: b.slug, name: b.name })
@@ -85,12 +81,14 @@ export default function Book() {
   const loadSlots = useCallback(async (silent = false) => {
     if (!biz || !serviceId || !windowStart) return
     if (!silent) setSlotsLoading(true)
-    const { data, error } = await supabase.rpc('available_slots', {
-      p_business: biz.id, p_service: serviceId, p_from: windowStart, p_days: WINDOW_DAYS, p_resource: resourceId || null,
-    })
+    let list: Slot[]
+    try {
+      list = await availableSlots({ businessId: biz.id, serviceId, from: windowStart, days: WINDOW_DAYS, resourceId: resourceId || null })
+    } catch (e) {
+      if (!silent) { setSlotsLoading(false); toast(errText(e), 'error') }
+      return
+    }
     if (!silent) setSlotsLoading(false)
-    if (error) { toast(errText(error), 'error'); return }
-    const list = (data ?? []) as Slot[]
     setSlots(list)
     if (pickedRef.current && !list.some((s) => s.starts_at === pickedRef.current)) {
       setPicked(null)
@@ -104,13 +102,10 @@ export default function Book() {
   useEffect(() => {
     if (!biz) return
     let t: ReturnType<typeof setTimeout>
-    const ch = supabase.channel(`pulse:${biz.id}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'business_pulse', filter: `business_id=eq.${biz.id}` },
-        () => { clearTimeout(t); t = setTimeout(() => void loadSlots(true), 300) })
-      .subscribe()
+    const stop = watchPulse(biz.id, () => { clearTimeout(t); t = setTimeout(() => void loadSlots(true), 300) })
     const onVis = () => document.visibilityState === 'visible' && void loadSlots(true)
     document.addEventListener('visibilitychange', onVis)
-    return () => { clearTimeout(t); void supabase.removeChannel(ch); document.removeEventListener('visibilitychange', onVis) }
+    return () => { clearTimeout(t); stop(); document.removeEventListener('visibilitychange', onVis) }
   }, [biz, loadSlots])
 
   // Gün bazında grupla; "fark etmez" seçiliyse aynı saatteki kaynakları birleştir
@@ -139,8 +134,8 @@ export default function Book() {
   // ---- Bu işletmedeki kendi randevularım ----
   const loadMine = useCallback(async () => {
     if (!session || !biz) { setMine([]); return }
-    const { data } = await supabase.rpc('my_bookings')
-    setMine(((data ?? []) as MyBooking[]).filter((b) => b.business_id === biz.id && ['pending', 'confirmed'].includes(b.status) && new Date(b.ends_at) > new Date()))
+    const data = await myBookings().catch(() => [] as MyBooking[])
+    setMine(data.filter((b) => b.business_id === biz.id && ['pending', 'confirmed'].includes(b.status) && new Date(b.ends_at) > new Date()))
   }, [session, biz])
   useEffect(() => { void loadMine() }, [loadMine])
 
@@ -148,18 +143,18 @@ export default function Book() {
     if (!biz || !service || !picked) return
     if (!consent) { toast('Lütfen aydınlatma metnini onaylayın.', 'error'); return }
     setBusy(true)
-    const { data, error } = await supabase.rpc('book', {
-      p_business: biz.id, p_service: service.id, p_starts_at: picked,
-      p_resource: resourceId || null, p_note: note.trim() || null, p_consent: true,
-    })
-    setBusy(false)
-    if (error) {
-      toast(errText(error), 'error')
-      if (/SLOT_TAKEN/.test(error.message)) { setSheet(false); setPicked(null); void loadSlots(true) }
+    let data: Done
+    try {
+      data = await book({ businessId: biz.id, serviceId: service.id, startsAt: picked, resourceId: resourceId || null, note: note.trim() || null, consent: true })
+    } catch (e) {
+      setBusy(false)
+      toast(errText(e), 'error')
+      if (/SLOT_TAKEN/.test(String((e as Error).message))) { setSheet(false); setPicked(null); void loadSlots(true) }
       return
     }
+    setBusy(false)
     save(`consent:${biz.id}`, true)
-    setDone(data as Done)
+    setDone(data)
     setSheet(false); setPicked(null); setNote('')
     void loadMine(); void loadSlots(true)
   }

@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useState } from 'react'
-import { supabase } from '../../lib/supabase'
+import { customerHistory, listCustomers, matchCustomer, updateCustomer } from '../../lib/api'
 import type { Booking, Customer } from '../../lib/types'
 import { fmtDateTime } from '../../lib/time'
 import { errText } from '../../lib/errors'
-import { displayPhone, telHref, waHref } from '../../lib/phone'
+import { displayPhone, normalizePhone, telHref, waHref } from '../../lib/phone'
 import { Button, Empty, Field, Sheet, Spinner, Toggle, useToast } from '../../components/ui'
 import { StatusBadge } from '../../components/StatusBadge'
 import { usePanel } from './context'
@@ -14,42 +14,33 @@ export default function Customers() {
   const { biz } = usePanel()
   const toast = useToast()
   const [q, setQ] = useState('')
-  const [list, setList] = useState<Customer[] | null>(null)
+  const [all, setAll] = useState<Customer[] | null>(null)
   const [sel, setSel] = useState<Customer | null>(null)
   const [history, setHistory] = useState<Booking[]>([])
   const [draft, setDraft] = useState({ name: '', phone: '', note: '', is_blocked: false })
   const [busy, setBusy] = useState(false)
   const [booking, setBooking] = useState<Customer | null>(null)
 
-  const load = useCallback(async () => {
-    let req = supabase.from('customers').select('*').eq('business_id', biz.id).order('created_at', { ascending: false }).limit(100)
-    const term = q.trim().replace(/[%,()]/g, '')
-    if (term) {
-      const digits = term.replace(/\D/g, '')
-      req = digits.length >= 3 ? req.ilike('phone', `%${digits.replace(/^0/, '')}%`) : req.ilike('name', `%${term}%`)
-    }
-    const { data } = await req
-    setList((data ?? []) as Customer[])
-  }, [biz.id, q])
-
-  useEffect(() => { const t = setTimeout(() => void load(), 250); return () => clearTimeout(t) }, [load])
+  const load = useCallback(async () => { setAll(await listCustomers(biz.id).catch(() => [])) }, [biz.id])
+  useEffect(() => { void load() }, [load])
+  const list = all === null ? null : all.filter((c) => matchCustomer(c, q)).slice(0, 200)
 
   async function openCustomer(c: Customer) {
     setSel(c)
     setDraft({ name: c.name, phone: c.phone ?? '', note: c.note ?? '', is_blocked: c.is_blocked })
-    const { data } = await supabase.from('bookings').select('*').eq('customer_id', c.id).order('starts_at', { ascending: false }).limit(50)
-    setHistory((data ?? []) as Booking[])
+    setHistory(await customerHistory(biz.id, c.id).catch(() => [] as Booking[]))
   }
 
   async function save() {
     if (!sel) return
     setBusy(true)
-    const { error } = await supabase.from('customers').update({
-      name: draft.name.trim(), note: draft.note.trim() || null, is_blocked: draft.is_blocked,
-      ...(sel.user_id ? {} : { phone: draft.phone.trim() || null }),
-    }).eq('id', sel.id)
+    try {
+      await updateCustomer(biz.id, sel.id, {
+        name: draft.name.trim(), note: draft.note.trim() || null, is_blocked: draft.is_blocked,
+        ...(sel.user_id ? {} : { phone: draft.phone.trim() ? normalizePhone(draft.phone) : null }),
+      })
+    } catch (e) { setBusy(false); toast(errText(e), 'error'); return }
     setBusy(false)
-    if (error) { toast(errText(error), 'error'); return }
     toast('Kaydedildi', 'success'); setSel(null); void load()
   }
 

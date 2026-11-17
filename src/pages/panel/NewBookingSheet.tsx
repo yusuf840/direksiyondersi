@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { supabase } from '../../lib/supabase'
+import { listCustomers, matchCustomer, staffCreateBooking } from '../../lib/api'
 import type { Customer } from '../../lib/types'
 import { errText } from '../../lib/errors'
 import { displayPhone, normalizePhone } from '../../lib/phone'
@@ -21,6 +21,7 @@ export function NewBookingSheet({ open, day, presetCustomer, onClose, onCreated 
   const [at, setAt] = useState<string | null>(null)
   const [q, setQ] = useState('')
   const [found, setFound] = useState<Customer[]>([])
+  const [all, setAll] = useState<Customer[] | null>(null)
   const [customer, setCustomer] = useState<Customer | null>(null)
   const [name, setName] = useState('')
   const [phone, setPhone] = useState('')
@@ -43,19 +44,12 @@ export function NewBookingSheet({ open, day, presetCustomer, onClose, onCreated 
     if (!eligible.some((r) => r.id === resourceId)) setResourceId(eligible.find((r) => r.id === myResourceId)?.id ?? eligible[0]?.id ?? '')
   }, [eligible, resourceId, myResourceId])
 
-  // Müşteri arama (ad ya da numara)
+  // Müşteri arama (ad ya da numara) — liste bir kez yüklenir, arama cihazda yapılır
+  useEffect(() => { if (open && all === null) listCustomers(biz.id).then(setAll, () => setAll([])) }, [open, all, biz.id])
   useEffect(() => {
     if (!open || customer || q.trim().length < 2) { setFound([]); return }
-    const t = setTimeout(async () => {
-      const term = q.trim().replace(/[%,()]/g, '')
-      const digits = term.replace(/\D/g, '')
-      let req = supabase.from('customers').select('*').eq('business_id', biz.id).limit(6)
-      req = digits.length >= 3 ? req.ilike('phone', `%${digits.replace(/^0/, '')}%`) : req.ilike('name', `%${term}%`)
-      const { data } = await req
-      setFound((data ?? []) as Customer[])
-    }, 250)
-    return () => clearTimeout(t)
-  }, [q, open, customer, biz.id])
+    setFound((all ?? []).filter((c) => matchCustomer(c, q)).slice(0, 6))
+  }, [q, open, customer, all])
 
   async function save() {
     setError(null)
@@ -66,12 +60,14 @@ export function NewBookingSheet({ open, day, presetCustomer, onClose, onCreated 
       if (phone && !normalizePhone(phone)) return setError('Telefon numarası geçersiz.')
     }
     setBusy(true)
-    const { error } = await supabase.rpc('staff_create_booking', {
-      p_business: biz.id, p_service: serviceId, p_resource: resourceId, p_starts_at: at,
-      p_customer_id: customer?.id ?? null, p_name: customer ? null : name.trim(), p_phone: customer ? null : (phone || null), p_note: note || null,
-    })
+    try {
+      await staffCreateBooking({
+        businessId: biz.id, serviceId, resourceId, startsAt: at,
+        customerId: customer?.id ?? null, name: customer ? null : name.trim(), phone: customer ? null : (phone || null), note: note || null,
+      })
+    } catch (e) { setBusy(false); setError(errText(e)); return }
     setBusy(false)
-    if (error) { setError(errText(error)); return }
+    setAll(null)
     toast('Randevu eklendi', 'success')
     onCreated(); onClose()
   }

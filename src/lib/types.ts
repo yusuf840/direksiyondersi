@@ -20,7 +20,8 @@ export interface Business {
   is_active: boolean
 }
 
-export interface Resource { id: string; business_id: string; name: string; is_active: boolean; sort: number }
+export interface HoursRange { weekday: number; start: string; end: string }
+export interface Resource { id: string; business_id: string; name: string; is_active: boolean; sort: number; hours: HoursRange[] }
 
 export interface Service {
   id: string
@@ -33,18 +34,10 @@ export interface Service {
   price_text: string | null
   is_active: boolean
   sort: number
+  resource_ids: string[]
 }
 
 export interface ServiceResource { service_id: string; resource_id: string; business_id: string }
-
-export interface WorkingHour {
-  id: string
-  business_id: string
-  resource_id: string
-  weekday: number
-  start_time: string
-  end_time: string
-}
 
 export interface TimeOff {
   id: string
@@ -83,6 +76,10 @@ export interface Booking {
   cancel_reason: string | null
   cancelled_by: 'customer' | 'staff' | null
   created_at: string
+  customer_user_id: string | null
+  customer_name: string
+  customer_phone: string | null
+  active: boolean
   customer?: Pick<Customer, 'id' | 'name' | 'phone' | 'is_blocked' | 'user_id'>
 }
 
@@ -106,7 +103,7 @@ export interface MyBooking {
 }
 
 export interface Member {
-  user_id: string
+  uid: string
   role: 'owner' | 'staff'
   resource_id: string | null
   full_name: string | null

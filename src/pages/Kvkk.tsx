@@ -1,4 +1,4 @@
-import { APP_NAME } from '../lib/supabase'
+import { APP_NAME } from '../lib/firebase'
 
 // Not: Bu metin bir şablondur. Yayına almadan önce bir hukukçuya kontrol ettirin.
 export default function Kvkk() {

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { supabase } from '../lib/supabase'
+import { createBusiness, slugTaken } from '../lib/api'
 import { useAuth } from '../lib/auth'
 import { errText } from '../lib/errors'
 import { save, slugify } from '../lib/storage'
@@ -35,8 +35,8 @@ export default function Onboarding() {
     if (slug.length < 3) { setSlugState('idle'); return }
     setSlugState('checking')
     const t = setTimeout(async () => {
-      const { data } = await supabase.from('businesses').select('id').eq('slug', slug).maybeSingle()
-      setSlugState(data ? 'taken' : 'free')
+      const taken = await slugTaken(slug).catch(() => false)
+      setSlugState(taken ? 'taken' : 'free')
     }, 350)
     return () => clearTimeout(t)
   }, [slug])
@@ -72,14 +72,15 @@ export default function Onboarding() {
     const v = validateWeek(week)
     if (v) { setError(v); return }
     setBusy(true); setError(null)
-    const { data, error } = await supabase.rpc('create_business', {
-      p_name: name.trim(), p_slug: slug, p_resource_label: label.trim(), p_resource_name: resource.trim(),
-      p_service_name: service.trim(), p_duration_min: Number(duration), p_hours: weekToRows(week),
-      p_phone: phone ? normalizePhone(phone) : null,
-    })
+    try {
+      const r = await createBusiness({
+        name: name.trim(), slug, resourceLabel: label.trim(), resourceName: resource.trim(),
+        serviceName: service.trim(), durationMin: Number(duration), hours: weekToRows(week),
+        phone: phone ? normalizePhone(phone) : null,
+      })
+      save('panelBusiness', r.id)
+    } catch (e) { setBusy(false); setError(errText(e)); return }
     setBusy(false)
-    if (error) { setError(errText(error)); return }
-    save('panelBusiness', data)
     nav('/panel/paylas?yeni=1', { replace: true })
   }
 

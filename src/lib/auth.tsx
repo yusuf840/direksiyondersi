@@ -1,10 +1,12 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react'
-import type { Session } from '@supabase/supabase-js'
-import { supabase, isConfigured } from './supabase'
+import { onAuthStateChanged, signOut as fbSignOut, type User } from 'firebase/auth'
+import { auth, isConfigured } from './firebase'
+import { getProfile } from './api'
 
 interface Profile { id: string; full_name: string | null; phone: string | null }
 interface AuthState {
-  session: Session | null
+  /** Giriş yapmış kullanıcı (telefonla doğrulanmış) */
+  session: User | null
   profile: Profile | null
   loading: boolean
   refreshProfile: () => Promise<void>
@@ -14,34 +16,29 @@ interface AuthState {
 const Ctx = createContext<AuthState>(null as unknown as AuthState)
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [session, setSession] = useState<Session | null>(null)
+  const [user, setUser] = useState<User | null>(null)
   const [profile, setProfile] = useState<Profile | null>(null)
   const [loading, setLoading] = useState(isConfigured)
 
-  const loadProfile = useCallback(async (s: Session | null) => {
-    if (!s) { setProfile(null); return }
-    const { data } = await supabase.from('profiles').select('id, full_name, phone').eq('id', s.user.id).maybeSingle()
-    setProfile(data ?? { id: s.user.id, full_name: null, phone: s.user.phone ? '+' + s.user.phone.replace('+', '') : null })
+  const loadProfile = useCallback(async (u: User | null) => {
+    if (!u) { setProfile(null); return }
+    const p = await getProfile(u.uid).catch(() => null)
+    setProfile({ id: u.uid, full_name: p?.full_name ?? null, phone: u.phoneNumber })
   }, [])
 
   useEffect(() => {
     if (!isConfigured) return
-    supabase.auth.getSession().then(async ({ data }) => {
-      setSession(data.session)
-      await loadProfile(data.session)
+    return onAuthStateChanged(auth, async (u) => {
+      setUser(u)
+      await loadProfile(u)
       setLoading(false)
     })
-    const { data: sub } = supabase.auth.onAuthStateChange((event, s) => {
-      setSession(s)
-      if (event === 'SIGNED_IN' || event === 'SIGNED_OUT' || event === 'USER_UPDATED') void loadProfile(s)
-    })
-    return () => sub.subscription.unsubscribe()
   }, [loadProfile])
 
   const value: AuthState = {
-    session, profile, loading,
-    refreshProfile: () => loadProfile(session),
-    signOut: async () => { await supabase.auth.signOut(); setProfile(null) },
+    session: user, profile, loading,
+    refreshProfile: () => loadProfile(auth.currentUser),
+    signOut: async () => { await fbSignOut(auth); setProfile(null) },
   }
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>
 }

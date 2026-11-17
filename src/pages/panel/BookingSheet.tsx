@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { supabase } from '../../lib/supabase'
+import { staffUpdateBooking } from '../../lib/api'
 import type { Booking, BookingStatus } from '../../lib/types'
 import { dayKeyOf, fmtDateTime, fmtTime } from '../../lib/time'
 import { errText } from '../../lib/errors'
@@ -30,15 +30,14 @@ export function BookingSheet({ booking, onClose, onChanged }: { booking: Booking
 
   function close() { setMode('view'); setMoveAt(null); setReason(''); onClose() }
 
-  async function update(args: { p_status?: BookingStatus; p_starts_at?: string; p_resource?: string; p_reason?: string }, label: string, then?: TemplateKind) {
+  async function update(args: { status?: BookingStatus; startsAt?: string; resourceId?: string; reason?: string }, label: string, then?: TemplateKind) {
     setBusy(label)
-    const { error } = await supabase.rpc('staff_update_booking', { p_id: b.id, ...args })
+    try { await staffUpdateBooking({ businessId: biz.id, bookingId: b.id, ...args }) } catch (e) { setBusy(null); toast(errText(e), 'error'); return }
     setBusy(null)
-    if (error) { toast(errText(error), 'error'); return }
     toast(label, 'success')
     onChanged()
     if (then && phone) {
-      setWaText(template(then, { customer: name, business: biz.name, service: b.service_name, startsAt: args.p_starts_at ?? b.starts_at, tz, address: biz.address, link }))
+      setWaText(template(then, { customer: name, business: biz.name, service: b.service_name, startsAt: args.startsAt ?? b.starts_at, tz, address: biz.address, link }))
       setMode('wa')
     } else close()
   }
@@ -74,28 +73,28 @@ export function BookingSheet({ booking, onClose, onChanged }: { booking: Booking
 
           {b.status === 'pending' ? (
             <div className="actions">
-              <Button variant="success" loading={busy === 'Onaylandı'} onClick={() => void update({ p_status: 'confirmed' }, 'Onaylandı', 'onay')}>Onayla</Button>
-              <Button variant="danger" loading={busy === 'Reddedildi'} onClick={() => void update({ p_status: 'rejected', p_reason: reason }, 'Reddedildi')}>Reddet</Button>
+              <Button variant="success" loading={busy === 'Onaylandı'} onClick={() => void update({ status: 'confirmed' }, 'Onaylandı', 'onay')}>Onayla</Button>
+              <Button variant="danger" loading={busy === 'Reddedildi'} onClick={() => void update({ status: 'rejected', reason: reason }, 'Reddedildi')}>Reddet</Button>
             </div>
           ) : null}
 
           {active && past ? (
             <div className="actions">
-              <Button variant="success" loading={busy === 'Geldi'} onClick={() => void update({ p_status: 'completed' }, 'Geldi')}>Geldi</Button>
-              <Button variant="secondary" loading={busy === 'Gelmedi'} onClick={() => void update({ p_status: 'no_show' }, 'Gelmedi')}>Gelmedi</Button>
+              <Button variant="success" loading={busy === 'Geldi'} onClick={() => void update({ status: 'completed' }, 'Geldi')}>Geldi</Button>
+              <Button variant="secondary" loading={busy === 'Gelmedi'} onClick={() => void update({ status: 'no_show' }, 'Gelmedi')}>Gelmedi</Button>
             </div>
           ) : null}
 
           {active ? (
             <div className="actions">
               <Button variant="secondary" onClick={() => { setMoveDay(dayKeyOf(b.starts_at, tz)); setMoveRes(b.resource_id); setMoveAt(null); setMode('move') }}>Saati değiştir</Button>
-              <Button variant="ghost" className="danger" loading={busy === 'İptal edildi'} onClick={() => { if (confirm('Randevu iptal edilsin mi?')) void update({ p_status: 'cancelled', p_reason: reason }, 'İptal edildi', 'iptal') }}>İptal et</Button>
+              <Button variant="ghost" className="danger" loading={busy === 'İptal edildi'} onClick={() => { if (confirm('Randevu iptal edilsin mi?')) void update({ status: 'cancelled', reason: reason }, 'İptal edildi', 'iptal') }}>İptal et</Button>
             </div>
           ) : null}
           {active ? <input className="input input-sm" placeholder="İptal / ret sebebi (isteğe bağlı)" value={reason} onChange={(e) => setReason(e.target.value)} /> : null}
 
           {!active && b.status !== 'completed' && !past ? (
-            <Button variant="ghost" onClick={() => void update({ p_status: 'confirmed' }, 'Yeniden açıldı')}>Randevuyu geri al</Button>
+            <Button variant="ghost" onClick={() => void update({ status: 'confirmed' }, 'Yeniden açıldı')}>Randevuyu geri al</Button>
           ) : null}
         </div>
       ) : null}
@@ -110,7 +109,7 @@ export function BookingSheet({ booking, onClose, onChanged }: { booking: Booking
           {b.service_id && moveDay ? <SlotPicker biz={biz} serviceId={b.service_id} resourceId={moveRes} day={moveDay} value={moveAt} onChange={setMoveAt} /> : null}
           <div className="actions">
             <Button variant="ghost" onClick={() => setMode('view')}>Vazgeç</Button>
-            <Button disabled={!moveAt} loading={busy === 'Saat değişti'} onClick={() => void update({ p_starts_at: moveAt!, p_resource: moveRes }, 'Saat değişti', 'degisiklik')}>Kaydet</Button>
+            <Button disabled={!moveAt} loading={busy === 'Saat değişti'} onClick={() => void update({ startsAt: moveAt!, resourceId: moveRes }, 'Saat değişti', 'degisiklik')}>Kaydet</Button>
           </div>
         </div>
       ) : null}

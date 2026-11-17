@@ -4,5 +4,10 @@ dev-dist
 .env
 .env.local
 *.log
-dist-mock
+dist-emu
 tests/ui/shots
+*.tsbuildinfo
+firebase-debug.log
+firestore-debug.log
+ui-debug.log
+.firebase

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { supabase } from '../lib/supabase'
+import { cancelMyBooking, forgetMe, myBookings } from '../lib/api'
 import { useAuth } from '../lib/auth'
 import type { MyBooking } from '../lib/types'
 import { fmtDateTime, minutesLabel } from '../lib/time'
@@ -24,9 +24,7 @@ export default function MyBookings() {
 
   const refresh = useCallback(async () => {
     if (!session) return
-    const { data, error } = await supabase.rpc('my_bookings')
-    if (error) toast(errText(error), 'error')
-    setItems((data ?? []) as MyBooking[])
+    try { setItems(await myBookings()) } catch (e) { toast(errText(e), 'error'); setItems([]) }
   }, [session, toast])
 
   useEffect(() => { void refresh() }, [refresh])
@@ -54,9 +52,8 @@ export default function MyBookings() {
   async function doCancel() {
     if (!cancelling) return
     setBusy(true)
-    const { error } = await supabase.rpc('cancel_my_booking', { p_id: cancelling.id, p_reason: reason || null })
+    try { await cancelMyBooking(cancelling.business_id, cancelling.id, reason || undefined) } catch (e) { setBusy(false); toast(errText(e), 'error'); return }
     setBusy(false)
-    if (error) { toast(errText(error), 'error'); return }
     toast('Randevu iptal edildi.', 'success')
     setCancelling(null); setReason('')
     void refresh()
@@ -130,8 +127,9 @@ export default function MyBookings() {
 
       <Sheet open={forget} onClose={() => setForget(false)} title="Verilerimi sil"
         footer={<Button variant="danger" loading={busy} onClick={async () => {
-          setBusy(true); const { error } = await supabase.rpc('forget_me'); setBusy(false)
-          if (error) { toast(errText(error), 'error'); return }
+          setBusy(true)
+          try { await forgetMe() } catch (e) { setBusy(false); toast(errText(e), 'error'); return }
+          setBusy(false)
           await signOut(); toast('Verileriniz silindi.', 'success'); nav('/')
         }}>Evet, sil</Button>}>
         <p>Gelecekteki randevularınız iptal edilir, işletmelerdeki adınız ve numaranız silinir. Bu işlem geri alınamaz.</p>

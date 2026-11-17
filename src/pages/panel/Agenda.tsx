@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { supabase } from '../../lib/supabase'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { watchBookings, watchPending } from '../../lib/api'
 import type { Booking } from '../../lib/types'
 import { addDays, dayKeyOf, dayRange, fmtDay, fmtDateTime, fmtTime, relativeDay, todayKey, weekStart } from '../../lib/time'
 import { Button, Chip, Empty, Spinner, useToast } from '../../components/ui'
@@ -8,8 +8,6 @@ import { usePanel } from './context'
 import { BookingSheet } from './BookingSheet'
 import { NewBookingSheet } from './NewBookingSheet'
 
-const SELECT = '*, customer:customers(id, name, phone, is_blocked, user_id)'
-const ACTIVE = ['pending', 'confirmed']
 
 function beep() {
   try {
@@ -26,8 +24,6 @@ export default function Agenda() {
   const tz = biz.timezone
   const [day, setDay] = useState(() => todayKey(tz))
   const [resFilter, setResFilter] = useState('')
-  const [items, setItems] = useState<Booking[] | null>(null)
-  const [weekCounts, setWeekCounts] = useState<Record<string, number>>({})
   const [pending, setPending] = useState<Booking[]>([])
   const [open, setOpen] = useState<Booking | null>(null)
   const [adding, setAdding] = useState(false)
@@ -35,46 +31,55 @@ export default function Agenda() {
   const [notifOk, setNotifOk] = useState(() => typeof Notification !== 'undefined' && Notification.permission === 'granted')
   const ws = weekStart(day)
 
-  const load = useCallback(async () => {
-    const [from, to] = dayRange(day, tz)
-    const [wFrom] = dayRange(ws, tz)
-    const [, wTo] = dayRange(addDays(ws, 6), tz)
-    const [d, w, p] = await Promise.all([
-      supabase.from('bookings').select(SELECT).eq('business_id', biz.id).gte('starts_at', from).lt('starts_at', to).order('starts_at'),
-      supabase.from('bookings').select('starts_at').eq('business_id', biz.id).in('status', ACTIVE).gte('starts_at', wFrom).lt('starts_at', wTo),
-      supabase.from('bookings').select(SELECT).eq('business_id', biz.id).eq('status', 'pending').gte('starts_at', new Date().toISOString()).order('starts_at').limit(50),
-    ])
-    setItems((d.data ?? []) as Booking[])
-    const c: Record<string, number> = {}
-    for (const x of w.data ?? []) { const k = dayKeyOf(x.starts_at, tz); c[k] = (c[k] ?? 0) + 1 }
-    setWeekCounts(c)
-    setPending((p.data ?? []) as Booking[])
-  }, [biz.id, day, ws, tz])
-
-  useEffect(() => { void load() }, [load])
-
-  // Anlık: yeni talep / iptal geldiğinde listeyi yenile ve haber ver
-  const loadRef = useRef(load); loadRef.current = load
+  // Haftanın tüm randevuları anlık izlenir; gün listesi ve sayılar buradan türetilir
+  const [weekItems, setWeekItems] = useState<Booking[] | null>(null)
   useEffect(() => {
-    const ch = supabase.channel(`panel:${biz.id}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'bookings', filter: `business_id=eq.${biz.id}` }, (e) => {
-        void loadRef.current()
-        const n = e.new as Partial<Booking>; const o = e.old as Partial<Booking>
+    setWeekItems(null)
+    const [from] = dayRange(ws, tz)
+    const [, to] = dayRange(addDays(ws, 6), tz)
+    return watchBookings(biz.id, from, to, (list, changes, initial) => {
+      setWeekItems(list)
+      if (initial) return
+      for (const c of changes) {
+        const n = c.booking
         let msg: string | null = null
-        if (e.eventType === 'INSERT' && n.source === 'customer') msg = `Yeni ${n.status === 'pending' ? 'randevu talebi' : 'randevu'}: ${fmtDateTime(n.starts_at!, tz)}`
-        if (e.eventType === 'UPDATE' && n.status === 'cancelled' && n.cancelled_by === 'customer' && o.status !== 'cancelled') msg = `Müşteri iptal etti: ${fmtDateTime(n.starts_at!, tz)}`
-        if (msg) {
-          toast(msg, 'info'); beep(); navigator.vibrate?.(200)
-          if (document.visibilityState === 'hidden' && typeof Notification !== 'undefined' && Notification.permission === 'granted') {
-            new Notification(biz.name, { body: msg, icon: '/icon-192.png', tag: n.id })
-          }
-        }
-      })
-      .subscribe()
-    const vis = () => document.visibilityState === 'visible' && void loadRef.current()
-    document.addEventListener('visibilitychange', vis)
-    return () => { void supabase.removeChannel(ch); document.removeEventListener('visibilitychange', vis) }
-  }, [biz.id, biz.name, tz, toast])
+        if (c.type === 'added' && n.source === 'customer') msg = `Yeni ${n.status === 'pending' ? 'randevu talebi' : 'randevu'}: ${n.customer_name} · ${fmtDateTime(n.starts_at, tz)}`
+        if (c.type === 'modified' && n.status === 'cancelled' && n.cancelled_by === 'customer') msg = `Müşteri iptal etti: ${n.customer_name} · ${fmtDateTime(n.starts_at, tz)}`
+        if (msg) notify(msg, n.id)
+      }
+    })
+  }, [biz.id, ws, tz]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Bekleyen talepler (hafta dışındakiler de); yeni gelen talep başka haftadaysa da haber ver
+  const seenPending = useRef<Set<string> | null>(null)
+  const wsRef = useRef(ws); wsRef.current = ws
+  useEffect(() => {
+    seenPending.current = null
+    return watchPending(biz.id, (list) => {
+      const seen = seenPending.current
+      if (seen) for (const b of list) {
+        const k = dayKeyOf(b.starts_at, tz)
+        const outsideWeek = k < wsRef.current || k > addDays(wsRef.current, 6) // hafta içindekileri haftalık izleyici bildiriyor
+        if (!seen.has(b.id) && b.source === 'customer' && outsideWeek) notify(`Yeni randevu talebi: ${b.customer_name} · ${fmtDateTime(b.starts_at, tz)}`, b.id)
+      }
+      seenPending.current = new Set(list.map((b) => b.id))
+      setPending(list)
+    })
+  }, [biz.id, tz]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  function notify(msg: string, tag: string) {
+    toast(msg, 'info'); beep(); navigator.vibrate?.(200)
+    if (document.visibilityState === 'hidden' && typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+      new Notification(biz.name, { body: msg, icon: '/icon-192.png', tag })
+    }
+  }
+
+  const items = useMemo(() => weekItems?.filter((b) => dayKeyOf(b.starts_at, tz) === day) ?? null, [weekItems, day, tz])
+  const weekCounts = useMemo(() => {
+    const c: Record<string, number> = {}
+    for (const b of weekItems ?? []) if (b.active) { const k = dayKeyOf(b.starts_at, tz); c[k] = (c[k] ?? 0) + 1 }
+    return c
+  }, [weekItems, tz])
 
   const shown = useMemo(() => (items ?? []).filter((b) =>
     (!resFilter || b.resource_id === resFilter) && (showCancelled || !['cancelled', 'rejected'].includes(b.status))), [items, resFilter, showCancelled])
@@ -158,8 +163,8 @@ export default function Agenda() {
 
       <Button className="fab no-print" onClick={() => setAdding(true)}>+ Randevu</Button>
 
-      <BookingSheet booking={open} onClose={() => setOpen(null)} onChanged={() => void load()} />
-      <NewBookingSheet open={adding} day={day >= todayKey(tz) ? day : todayKey(tz)} onClose={() => setAdding(false)} onCreated={() => void load()} />
+      <BookingSheet booking={open} onClose={() => setOpen(null)} onChanged={() => {}} />
+      <NewBookingSheet open={adding} day={day >= todayKey(tz) ? day : todayKey(tz)} onClose={() => setAdding(false)} onCreated={() => {}} />
     </div>
   )
 }

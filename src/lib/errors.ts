@@ -22,11 +22,24 @@ const MESSAGES: Record<string, string> = {
   FORBIDDEN: 'Bu işlem için yetkiniz yok.',
   RESOURCE_NOT_FOUND: 'Seçilen kaynak bulunamadı.',
   CUSTOMER_NOT_FOUND: 'Müşteri bulunamadı.',
+  HOURS_OVERLAP: 'Aynı gün içinde aralıklar üst üste biniyor.',
+  HOURS_INVALID: 'Çalışma saatlerinden biri geçersiz.',
+  SLUG_INVALID: 'Bağlantı adı 3–40 karakter; küçük harf, rakam ve tire olabilir.',
+  INVALID_PHONE: 'Telefon numarası geçersiz.',
+  INVALID_INPUT: 'Girilen değerlerden biri geçersiz.',
 }
 
 export function errText(e: unknown): string {
   const raw = (e as { message?: string })?.message ?? String(e)
   for (const code of Object.keys(MESSAGES)) if (raw.includes(code)) return MESSAGES[code]
+  // Firebase Auth hata kodları
+  if (/auth\/invalid-verification-code|auth\/code-expired/.test(raw)) return 'Kod hatalı ya da süresi dolmuş.'
+  if (/auth\/invalid-phone-number/.test(raw)) return 'Telefon numarası geçersiz.'
+  if (/auth\/too-many-requests|auth\/quota-exceeded/.test(raw)) return 'Çok fazla deneme yapıldı. Biraz bekleyip tekrar deneyin.'
+  if (/auth\/captcha-check-failed|recaptcha/i.test(raw)) return 'Güvenlik doğrulaması başarısız. Sayfayı yenileyip tekrar deneyin.'
+  if (/auth\/operation-not-allowed|auth\/billing-not-enabled/.test(raw)) return 'Telefonla giriş henüz açılmamış (işletme yöneticisi: Firebase ayarları).'
+  if (/auth\/network-request-failed|unavailable/i.test(raw)) return 'Bağlantı yok. İnternetinizi kontrol edin.'
+  if (/permission-denied|Missing or insufficient permissions/i.test(raw)) return 'Bu işlem için yetkiniz yok.'
   if (/rate limit|too many/i.test(raw)) return 'Çok fazla deneme yapıldı. Biraz bekleyip tekrar deneyin.'
   if (/token has expired|invalid/i.test(raw) && /otp|token/i.test(raw)) return 'Kod hatalı ya da süresi dolmuş.'
   if (/Failed to fetch|NetworkError/i.test(raw)) return 'Bağlantı yok. İnternetinizi kontrol edin.'

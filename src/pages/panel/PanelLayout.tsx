@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link, NavLink, Navigate, Outlet, useLocation } from 'react-router-dom'
-import { supabase } from '../../lib/supabase'
+import { loadBusinessMeta, myMemberships } from '../../lib/api'
 import { useAuth } from '../../lib/auth'
 import { load, save } from '../../lib/storage'
-import type { Business, Resource, Service, ServiceResource } from '../../lib/types'
+import type { Business } from '../../lib/types'
 import { Spinner } from '../../components/ui'
 import { PanelContext, type PanelCtx } from './context'
 
@@ -18,8 +18,7 @@ export default function PanelLayout() {
 
   const loadMemberships = useCallback(async () => {
     if (!session) return
-    const { data } = await supabase.from('business_members').select('role, resource_id, business:businesses(*)').eq('user_id', session.user.id)
-    setMemberships(((data ?? []) as unknown as Membership[]).filter((m) => m.business))
+    setMemberships(await myMemberships(session.uid).catch(() => []))
   }, [session])
 
   useEffect(() => { void loadMemberships() }, [loadMemberships])
@@ -29,14 +28,10 @@ export default function PanelLayout() {
   const reload = useCallback(async () => {
     if (!current) return
     const id = current.business.id
-    const [b, r, s, l] = await Promise.all([
-      supabase.from('businesses').select('*').eq('id', id).single(),
-      supabase.from('resources').select('*').eq('business_id', id).order('sort').order('created_at'),
-      supabase.from('services').select('*').eq('business_id', id).order('sort').order('created_at'),
-      supabase.from('service_resources').select('*').eq('business_id', id),
-    ])
-    if (b.data) setMemberships((ms) => ms?.map((m) => m.business.id === id ? { ...m, business: b.data as Business } : m) ?? ms)
-    setMeta({ resources: (r.data ?? []) as Resource[], services: (s.data ?? []) as Service[], links: (l.data ?? []) as ServiceResource[] })
+    const meta = await loadBusinessMeta(id)
+    if (!meta) return
+    setMemberships((ms) => ms?.map((m) => m.business.id === id ? { ...m, business: meta.biz } : m) ?? ms)
+    setMeta({ resources: meta.resources, services: meta.services, links: meta.links })
   }, [current?.business.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => { setMeta(null); void reload() }, [reload])

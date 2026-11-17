@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { APP_NAME } from '../lib/supabase'
+import { APP_NAME } from '../lib/firebase'
 import { useAuth } from '../lib/auth'
 import { load, recentPlaces } from '../lib/storage'
 
