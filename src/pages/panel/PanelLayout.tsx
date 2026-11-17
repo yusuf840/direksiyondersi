@@ -10,7 +10,7 @@ import { PanelContext, type PanelCtx } from './context'
 interface Membership { role: 'owner' | 'staff'; resource_id: string | null; business: Business }
 
 export default function PanelLayout() {
-  const { session, profile, loading } = useAuth()
+  const { session, isRealUser, loading } = useAuth()
   const loc = useLocation()
   const [memberships, setMemberships] = useState<Membership[] | null>(null)
   const [bizId, setBizId] = useState<string | null>(() => load('panelBusiness', null))
@@ -38,7 +38,7 @@ export default function PanelLayout() {
   useEffect(() => { if (current) { save('panelBusiness', current.business.id); save('lastPlace', '/panel') } }, [current])
 
   if (loading) return <Spinner />
-  if (!session || !profile?.full_name) return <Navigate to={`/giris?next=${encodeURIComponent(loc.pathname)}`} replace />
+  if (!session || !isRealUser) return <Navigate to={`/giris?next=${encodeURIComponent(loc.pathname)}`} replace />
   if (!memberships) return <Spinner />
   if (!current) return <Navigate to="/yeni" replace />
   if (!meta) return <Spinner />

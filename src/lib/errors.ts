@@ -1,5 +1,6 @@
 const MESSAGES: Record<string, string> = {
   SLOT_TAKEN: 'Bu saat az önce doldu. Lütfen başka bir saat seçin.',
+  BOOKING_REJECTED: 'Randevu kaydedilemedi. İşletme şu an çevrim içi randevu almıyor olabilir; lütfen işletmeyi arayın.',
   CUSTOMER_OVERLAP: 'Bu saatle çakışan başka bir randevunuz var.',
   ACTIVE_LIMIT: 'Bu işletmede açık randevu sınırına ulaştınız. Mevcut randevunuz geçince ya da iptal edince yenisini alabilirsiniz.',
   WEEKLY_LIMIT: 'Bu hafta için alabileceğiniz randevu sınırına ulaştınız.',
@@ -7,7 +8,7 @@ const MESSAGES: Record<string, string> = {
   CONSENT_REQUIRED: 'Devam etmek için aydınlatma metnini onaylamanız gerekiyor.',
   NAME_REQUIRED: 'Lütfen adınızı girin.',
   INVALID_NAME: 'Ad en az 2 karakter olmalı.',
-  AUTH_REQUIRED: 'Lütfen telefon numaranızla giriş yapın.',
+  AUTH_REQUIRED: 'Lütfen giriş yapın.',
   PHONE_REQUIRED: 'Lütfen telefon numaranızla giriş yapın.',
   BUSINESS_NOT_FOUND: 'İşletme bulunamadı ya da şu an randevu almıyor.',
   SERVICE_NOT_FOUND: 'Bu hizmet artık sunulmuyor.',
@@ -37,7 +38,8 @@ export function errText(e: unknown): string {
   if (/auth\/invalid-phone-number/.test(raw)) return 'Telefon numarası geçersiz.'
   if (/auth\/too-many-requests|auth\/quota-exceeded/.test(raw)) return 'Çok fazla deneme yapıldı. Biraz bekleyip tekrar deneyin.'
   if (/auth\/captcha-check-failed|recaptcha/i.test(raw)) return 'Güvenlik doğrulaması başarısız. Sayfayı yenileyip tekrar deneyin.'
-  if (/auth\/operation-not-allowed|auth\/billing-not-enabled/.test(raw)) return 'Telefonla giriş henüz açılmamış (işletme yöneticisi: Firebase ayarları).'
+  if (/auth\/operation-not-allowed|auth\/admin-restricted-operation/.test(raw)) return "Bu giriş yöntemi Firebase'de açılmamış (Authentication > Sign-in method)."
+  if (/auth\/unauthorized-domain/.test(raw)) return "Bu alan adı Firebase'de yetkili değil (Authentication > Settings > Authorized domains)."
   if (/auth\/network-request-failed|unavailable/i.test(raw)) return 'Bağlantı yok. İnternetinizi kontrol edin.'
   if (/permission-denied|Missing or insufficient permissions/i.test(raw)) return 'Bu işlem için yetkiniz yok.'
   if (/rate limit|too many/i.test(raw)) return 'Çok fazla deneme yapıldı. Biraz bekleyip tekrar deneyin.'

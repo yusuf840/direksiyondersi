@@ -9,7 +9,7 @@ import { displayPhone, telHref, waHref } from '../lib/phone'
 import { load, rememberPlace, save } from '../lib/storage'
 import { downloadIcs } from '../lib/ics'
 import { Button, Chip, Empty, Notice, Sheet, Spinner, useToast } from '../components/ui'
-import { PhoneLogin } from '../components/PhoneLogin'
+import { CustomerForm } from '../components/CustomerForm'
 import { StatusBadge } from '../components/StatusBadge'
 
 const WINDOW_DAYS = 14
@@ -311,10 +311,10 @@ export default function Book() {
         </div>
       ) : null}
 
-      <Sheet open={sheet} onClose={() => setSheet(false)} title={session && profile?.full_name ? 'Randevuyu onayla' : 'Telefonunuzu doğrulayın'}>
-        {!session || !profile?.full_name ? (
-          <PhoneLogin onDone={() => { /* oturum açılınca sheet onay görünümüne geçer */ }}
-            intro="Sahte randevuları önlemek için numaranızı bir kez doğruluyoruz. Sonraki randevularda tekrar sorulmaz." />
+      <Sheet open={sheet} onClose={() => setSheet(false)} title={session && profile?.full_name && profile.phone ? 'Randevuyu onayla' : 'Bilgileriniz'}>
+        {!session || !profile?.full_name || !profile.phone ? (
+          <CustomerForm onDone={() => { /* bilgiler kaydedilince onay görünümüne geçer */ }}
+            intro="Hesap açmanız gerekmez. Bilgileriniz bu cihazda hatırlanır, sonraki randevularda tekrar sorulmaz." />
         ) : picked && service ? (
           <div className="stack">
             <dl className="summary">

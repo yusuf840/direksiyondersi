@@ -1,14 +1,18 @@
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { PhoneLogin } from '../components/PhoneLogin'
+import { useEffect } from 'react'
+import { useAuth } from '../lib/auth'
+import { OwnerLogin } from '../components/OwnerLogin'
 
 export default function Login() {
   const [q] = useSearchParams()
   const nav = useNavigate()
   const next = q.get('next') || '/panel'
+  const { isRealUser } = useAuth()
+  useEffect(() => { if (isRealUser) nav(next, { replace: true }) }, [isRealUser, next, nav])
   return (
     <div className="page narrow">
-      <h1>Giriş</h1>
-      <div className="card"><PhoneLogin onDone={() => nav(next, { replace: true })} intro="Şifre yok: numaranıza gelen kodla girersiniz." /></div>
+      <h1>İşletme girişi</h1>
+      <div className="card"><OwnerLogin intro="İşletme sahibi ve ekip, Google hesabıyla girer. Şifre yok. (Randevu almak için giriş gerekmez.)" /></div>
     </div>
   )
 }

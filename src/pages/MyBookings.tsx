@@ -10,10 +10,9 @@ import { downloadIcs } from '../lib/ics'
 import { recentPlaces } from '../lib/storage'
 import { Button, Empty, Sheet, Spinner, useToast } from '../components/ui'
 import { StatusBadge } from '../components/StatusBadge'
-import { PhoneLogin } from '../components/PhoneLogin'
 
 export default function MyBookings() {
-  const { session, profile, loading, signOut } = useAuth()
+  const { session, isRealUser, profile, loading, signOut } = useAuth()
   const toast = useToast()
   const nav = useNavigate()
   const [items, setItems] = useState<MyBooking[] | null>(null)
@@ -37,10 +36,12 @@ export default function MyBookings() {
   }, [refresh])
 
   if (loading) return <Spinner />
-  if (!session || !profile?.full_name) return (
+  if (!session) return (
     <div className="page narrow">
       <h1>Randevularım</h1>
-      <div className="card"><PhoneLogin onDone={() => void refresh()} intro="Randevularınızı görmek için telefon numaranızla giriş yapın." /></div>
+      <Empty title="Bu cihazda randevu yok">
+        Randevularınız, randevu aldığınız cihazda görünür. Başka cihazdan aldıysanız oradan bakın ya da işletmeyi arayın.
+      </Empty>
     </div>
   )
 
@@ -69,7 +70,7 @@ export default function MyBookings() {
       <div className="row-between">
         <h1>Randevularım</h1>
       </div>
-      <p className="muted small">{profile.full_name} · {displayPhone(profile.phone)}</p>
+      {profile?.full_name ? <p className="muted small">{profile.full_name} · {displayPhone(profile.phone)} · bu cihazdaki randevular</p> : null}
 
       {items === null ? <Spinner /> : <>
         <h2 className="section-title">Yaklaşan</h2>
@@ -114,7 +115,7 @@ export default function MyBookings() {
       </>}
 
       <div className="stack top-gap">
-        <Button variant="ghost" onClick={() => void signOut().then(() => nav('/'))}>Çıkış yap</Button>
+        {isRealUser ? <Button variant="ghost" onClick={() => void signOut().then(() => nav('/'))}>Çıkış yap</Button> : null}
         <button className="link danger center" onClick={() => setForget(true)}>Verilerimi sil</button>
       </div>
 

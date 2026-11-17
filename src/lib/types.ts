@@ -45,7 +45,6 @@ export interface TimeOff {
   resource_id: string | null
   starts_at: string
   ends_at: string
-  reason: string | null
 }
 
 export interface Customer {

@@ -6,14 +6,14 @@ import { errText } from '../lib/errors'
 import { save, slugify } from '../lib/storage'
 import { isTrMobile, normalizePhone } from '../lib/phone'
 import { Button, Chip, Field, Notice, Spinner } from '../components/ui'
-import { PhoneLogin } from '../components/PhoneLogin'
+import { OwnerLogin } from '../components/OwnerLogin'
 import { HoursEditor, emptyWeek, validateWeek, weekToRows, type WeekHours } from '../components/HoursEditor'
 
 const LABEL_IDEAS = ['Personel', 'Uzman', 'Eğitmen', 'Doktor', 'Usta', 'Saha', 'Masa', 'Oda', 'Araç']
 const DURATION_IDEAS = [15, 20, 30, 45, 60, 90]
 
 export default function Onboarding() {
-  const { session, profile, loading } = useAuth()
+  const { isRealUser, loading } = useAuth()
   const nav = useNavigate()
   const [step, setStep] = useState(1)
   const [name, setName] = useState('')
@@ -30,7 +30,6 @@ export default function Onboarding() {
   const [busy, setBusy] = useState(false)
 
   useEffect(() => { if (!slugTouched) setSlug(slugify(name)) }, [name, slugTouched])
-  useEffect(() => { if (profile?.phone && !phone) setPhone('0' + profile.phone.replace('+90', '')) }, [profile, phone])
   useEffect(() => {
     if (slug.length < 3) { setSlugState('idle'); return }
     setSlugState('checking')
@@ -42,10 +41,10 @@ export default function Onboarding() {
   }, [slug])
 
   if (loading) return <Spinner />
-  if (!session || !profile?.full_name) return (
+  if (!isRealUser) return (
     <div className="page narrow">
       <h1>İşletmenizi ekleyin</h1>
-      <div className="card"><PhoneLogin onDone={() => {}} intro="Önce numaranızı doğrulayalım. Şifre yok; her girişte SMS kodu yeterli." /></div>
+      <div className="card"><OwnerLogin intro="İşletmenizi yönetmek için Google hesabınızla girin. Şifre yok, ücretsiz." /></div>
     </div>
   )
 

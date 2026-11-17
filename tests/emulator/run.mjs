@@ -1,170 +1,148 @@
-// Firebase emülatöründe uçtan uca kural testleri.
-// Çalıştırma: npm run test:firebase   (firebase emulators:exec ile)
+// Firestore güvenlik kuralları testleri (emülatör). Çalıştırma: npm run test:rules
+// Müşteri ekranını atlayıp doğrudan veritabanına yazmaya çalışan "kötü niyetli istemci" senaryoları dahil.
 import { initializeApp, deleteApp } from 'firebase/app'
-import { getAuth, connectAuthEmulator, signInWithCustomToken } from 'firebase/auth'
-import { getFirestore, connectFirestoreEmulator, doc, getDoc, getDocs, setDoc, updateDoc, addDoc, collection, Timestamp } from 'firebase/firestore'
-import { getFunctions, connectFunctionsEmulator, httpsCallable } from 'firebase/functions'
+import { getAuth, connectAuthEmulator, signInAnonymously, signInWithCredential, GoogleAuthProvider } from 'firebase/auth'
+import { getFirestore, connectFirestoreEmulator, doc, getDoc, getDocs, collection, writeBatch, updateDoc, setDoc, Timestamp } from 'firebase/firestore'
 
-const PROJECT = 'demo-randevu'
-const HOST = '127.0.0.1'
-const TZ = 'Europe/Istanbul'
-let n = 0, failed = 0
+const PROJECT = 'demo-randevu', HOST = '127.0.0.1'
+let passed = 0, failed = 0
+const ok = (label, cond, info = '') => { if (cond) { passed++; console.log('ok  ', label) } else { failed++; console.log('FAIL', label, info) } }
+const denied = async (p) => { try { await p; return false } catch (e) { return e.code === 'permission-denied' || /permission|insufficient|false for/i.test(e.message) } }
+const works = async (p) => { try { await p; return true } catch (e) { console.log('     beklenmeyen hata:', e.message.split('\n')[0]); return false } }
 
-function ok(label, cond, info = '') {
-  if (cond) { n++; console.log('ok  ', label) } else { failed++; console.log('FAIL', label, info || `(son hata: ${lastErr})`) }
-}
-let lastErr = ''
-async function err(p) {
-  try { await p; lastErr = 'OK'; return 'OK' } catch (e) { lastErr = String(e.message || e).replace(/ \[\d+\]$/, ''); return lastErr }
-}
-
-// Telefonla giriş yapmış bir kullanıcı oluşturur (Auth emülatörü SMS göndermez, kodu REST'ten okuruz)
-async function phoneUser(phone) {
-  const app = initializeApp({ apiKey: 'demo-key', projectId: PROJECT, appId: 'demo' }, `${phone ?? 'anon'}-${Math.random()}`)
+async function user(kind, id) {
+  const app = initializeApp({ apiKey: 'demo-key', projectId: PROJECT, appId: 'demo' }, `${kind}-${id}-${Math.random()}`)
   const auth = getAuth(app); connectAuthEmulator(auth, `http://${HOST}:9099`, { disableWarnings: true })
   const db = getFirestore(app); connectFirestoreEmulator(db, HOST, 8080)
-  const fns = getFunctions(app, 'europe-west1'); connectFunctionsEmulator(fns, HOST, 5001)
-  if (phone) {
-    const r = await fetch(`http://${HOST}:9099/identitytoolkit.googleapis.com/v1/accounts:sendVerificationCode?key=demo-key`, {
-      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ phoneNumber: phone }),
-    }).then((x) => x.json())
-    const codes = await fetch(`http://${HOST}:9099/emulator/v1/projects/${PROJECT}/verificationCodes`).then((x) => x.json())
-    const code = codes.verificationCodes.reverse().find((c) => c.sessionInfo === r.sessionInfo).code
-    const signed = await fetch(`http://${HOST}:9099/identitytoolkit.googleapis.com/v1/accounts:signInWithPhoneNumber?key=demo-key`, {
-      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ sessionInfo: r.sessionInfo, code }),
-    }).then((x) => x.json())
-    // SMS kodu doğrulandı ve telefonlu kullanıcı oluştu; SDK oturumunu emülatörün imzasız özel jetonuyla açıyoruz
-    const b64 = (o) => Buffer.from(JSON.stringify(o)).toString('base64url')
-    const now = Math.floor(Date.now() / 1000)
-    const token = `${b64({ alg: 'none', typ: 'JWT' })}.${b64({ aud: 'https://identitytoolkit.googleapis.com/google.identity.identitytoolkit.v1.IdentityToolkit', iat: now, exp: now + 3600, iss: 'firebase-auth-emulator@example.com', sub: 'firebase-auth-emulator@example.com', uid: signed.localId })}.`
-    await signInWithCustomToken(auth, token)
-  }
-  const call = (name) => (data) => httpsCallable(fns, name)(data).then((x) => x.data)
-  return { app, auth, db, call, uid: auth.currentUser?.uid }
+  if (kind === 'google') await signInWithCredential(auth, GoogleAuthProvider.credential(JSON.stringify({ sub: id, email: `${id}@ornek.com`, email_verified: true, name: id })))
+  else await signInAnonymously(auth)
+  return { app, db, uid: auth.currentUser.uid }
 }
 
-// İstanbul saatinde gün + saat -> ISO
-const dayKey = (offset) => new Intl.DateTimeFormat('en-CA', { timeZone: TZ }).format(new Date(Date.now() + offset * 864e5))
-const at = (key, hhmm) => new Date(`${key}T${hhmm}:00+03:00`).toISOString()
+const CELL = 5 * 60_000
+const cellOf = (ms) => Math.floor(ms / CELL)
+const dayKey = (off) => new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Istanbul' }).format(new Date(Date.now() + off * 864e5))
+const at = (key, hhmm) => new Date(`${key}T${hhmm}:00+03:00`)
+const D = dayKey(5)
 
-const D = dayKey(10)
-const owner = await phoneUser('+905300000001')
-const B = await phoneUser('+905300000002')
-const C = await phoneUser('+905300000003')
-const Dd = await phoneUser('+905300000004')
-const anon = await phoneUser(null)
+// ---- kurulum: sahip (Google) işletmeyi açar ----
+const owner = await user('google', 'sahip')
+const anonOwner = await user('anon', 'x')
+const bid = 'isletme1', rid = 'kaynak1', sid = 'hizmet1'
+function setupBatch(u, b, slug) {
+  const w = writeBatch(u.db)
+  w.set(doc(u.db, 'slugs', slug), { business_id: b })
+  w.set(doc(u.db, 'businesses', b), {
+    slug, name: 'Test İşletme', description: null, phone: null, address: null, timezone: 'Europe/Istanbul', resource_label: 'Uzman',
+    booking_mode: 'approval', slot_interval_min: 60, min_notice_min: 60, max_advance_days: 30, cancel_until_min: 120,
+    max_active_per_customer: 3, weekly_limit_per_customer: null, booking_note: null, is_active: true, created_by: u.uid,
+  })
+  w.set(doc(u.db, 'businesses', b, 'members', u.uid), { uid: u.uid, business_id: b, role: 'owner', resource_id: rid, full_name: 'Sahip' })
+  w.set(doc(u.db, 'users', u.uid, 'memberships', b), { business_id: b })
+  w.set(doc(u.db, 'businesses', b, 'resources', rid), { name: 'Ayşe', is_active: true, sort: 0, hours: [1, 2, 3, 4, 5, 6, 7].flatMap((x) => [{ weekday: x, start: '09:00', end: '12:00' }, { weekday: x, start: '13:00', end: '18:00' }]) })
+  w.set(doc(u.db, 'businesses', b, 'services', sid), { name: 'Görüşme', description: null, duration_min: 50, buffer_min: 10, slot_interval_min: 60, price_text: null, is_active: true, sort: 0, resource_ids: [] })
+  return w.commit()
+}
+ok('hesapsız (anonim) kullanıcı işletme açamaz', await denied(setupBatch(anonOwner, 'kotu', 'kotu-isletme')))
+ok('sahip Google hesabıyla işletmeyi kurar', await works(setupBatch(owner, bid, 'test-isletme')))
+const other = await user('google', 'baskasi')
+ok('başkası aynı bağlantı adını alamaz', await denied(setupBatch(other, 'isletme2', 'test-isletme')))
+ok('başkası var olan işletmeye kendini sahip yazamaz', await denied(setDoc(doc(other.db, 'businesses', bid, 'members', other.uid), { uid: other.uid, business_id: bid, role: 'owner' })))
 
-// 1) Sahip kurar: saatleri KENDİSİ girer (öğle arası iki aralıkla)
-await owner.call('updateMyName')({ name: 'Ayşe Sahip' })
-const hours = [1, 2, 3, 4, 5, 6, 7].flatMap((w) => [{ weekday: w, start: '09:00', end: '12:00' }, { weekday: w, start: '13:00', end: '18:00' }])
-ok('çakışan çalışma saatleri reddedilir', (await err(owner.call('createBusiness')({ name: 'Deneme', slug: 'xx-yy', resourceLabel: 'U', resourceName: 'A', serviceName: 'S', durationMin: 30, hours: [{ weekday: 1, start: '09:00', end: '12:00' }, { weekday: 1, start: '11:00', end: '13:00' }] }))) === 'HOURS_OVERLAP')
-const { id: bid } = await owner.call('createBusiness')({ name: 'Test İşletme', slug: 'test-isletme', resourceLabel: 'Uzman', resourceName: 'Ayşe', serviceName: 'Görüşme', durationMin: 50, hours })
-ok('aynı bağlantı adı ikinci kez alınamaz', (await err(owner.call('createBusiness')({ name: 'Başka', slug: 'test-isletme', resourceLabel: 'U', resourceName: 'A', serviceName: 'S', durationMin: 30, hours }))) === 'SLUG_TAKEN')
-const svcs = await getDocs(collection(owner.db, 'businesses', bid, 'services'))
-const sid = svcs.docs[0].id
-await setDoc(doc(owner.db, 'businesses', bid, 'services', sid), { ...svcs.docs[0].data(), buffer_min: 10, slot_interval_min: 60 })
-const rid = (await getDocs(collection(owner.db, 'businesses', bid, 'resources'))).docs[0].id
-const slots = (u, key = D) => u.call('availableSlots')({ businessId: bid, serviceId: sid, from: key, days: 1 })
+// ---- müşteri randevusu (uygulamanın yaptığı toplu yazmanın aynısı) ----
+function bookBatch(u, { start, minutes = 50, buffer = 10, status = 'pending', cells = 'all', phone = '+905300000002', resource = rid, source = 'customer' }) {
+  const s = start.getTime(), e = s + minutes * 60_000, blk = e + buffer * 60_000
+  const ref = doc(collection(u.db, 'businesses', bid, 'bookings'))
+  const w = writeBatch(u.db)
+  w.set(ref, {
+    business_id: bid, resource_id: resource, service_id: sid, service_name: 'Görüşme',
+    customer_id: u.uid, customer_user_id: u.uid, customer_name: 'Müşteri', customer_phone: phone,
+    starts_at: Timestamp.fromMillis(s), ends_at: Timestamp.fromMillis(e), block_until: Timestamp.fromMillis(blk),
+    cell_first: cellOf(s), cell_last: cellOf(blk - 1), status, active: true, source,
+    customer_note: null, cancel_reason: null, cancelled_by: null, created_at: Timestamp.now(), updated_at: Timestamp.now(),
+  })
+  const list = []
+  for (let c = cellOf(s); c <= cellOf(blk - 1); c++) list.push(c)
+  const chosen = cells === 'all' ? list : []
+  for (const c of chosen) w.set(doc(u.db, 'businesses', bid, 'cells', `${resource}_${c}`), { business_id: bid, resource_id: resource, cell: c, booking_id: ref.id })
+  w.set(doc(u.db, 'users', u.uid, 'myBookings', ref.id), { business_id: bid })
+  return { ref, commit: () => w.commit() }
+}
 
-let s = await slots(anon)
-ok('boş saat sayısı 8 (09,10,11,13..17)', s.length === 8, s.length)
-ok('giriş yapmamış ziyaretçi bağlantıdan işletmeyi bulur', (await getDoc(doc(anon.db, 'slugs', 'test-isletme'))).data()?.business_id === bid)
+const B = await user('anon', 'B'), C = await user('anon', 'C'), Dd = await user('anon', 'D')
+const b1 = bookBatch(B, { start: at(D, '10:00') })
+ok('müşteri boş saate randevu alır (hesapsız)', await works(b1.commit()))
+ok('başka müşteri aynı saate yazamaz', await denied(bookBatch(C, { start: at(D, '10:00') }).commit()))
+ok('kısmen çakışan saate (10:30) yazamaz', await denied(bookBatch(C, { start: at(D, '10:30') }).commit()))
+ok('önceki randevunun arasına (10:55) yazamaz', await denied(bookBatch(C, { start: at(D, '10:55'), minutes: 5, buffer: 0 }).commit()))
+ok('dilim kilidi olmadan randevu yazılamaz', await denied(bookBatch(C, { start: at(D, '15:00'), cells: 'none' }).commit()))
+ok('onaylı modda kendini "onaylandı" yazamaz', await denied(bookBatch(C, { start: at(D, '15:00'), status: 'confirmed' }).commit()))
+ok('hizmet süresini kısaltamaz', await denied(bookBatch(C, { start: at(D, '15:00'), minutes: 10 }).commit()))
+ok('arayı (buffer) atlayamaz', await denied(bookBatch(C, { start: at(D, '15:00'), buffer: 0 }).commit()))
+ok('"ekip" kaynağıyla randevu yazamaz', await denied(bookBatch(C, { start: at(D, '15:00'), status: 'confirmed', source: 'staff' }).commit()))
+ok('en az önceden haber süresinden (60 dk) yakın saate yazamaz', await denied(bookBatch(C, { start: new Date(Math.ceil((Date.now() + 20 * 60_000) / CELL) * CELL) }).commit()))
+ok('ileri tarih sınırının (30 gün) ötesine yazamaz', await denied(bookBatch(C, { start: at(dayKey(40), '10:00') }).commit()))
 
-// 2) Müşteri B
-const bookB = (u, hhmm, extra = {}) => u.call('book')({ businessId: bid, serviceId: sid, startsAt: at(D, hhmm), consent: true, ...extra })
-ok('isimsiz müşteri reddedilir', (await err(bookB(B, '10:00'))) === 'NAME_REQUIRED')
-await B.call('updateMyName')({ name: 'Bora Müşteri' })
-ok('KVKK onayı olmadan reddedilir', (await err(bookB(B, '10:00', { consent: false }))) === 'CONSENT_REQUIRED')
-const r1 = await bookB(B, '10:00', { note: 'not' })
-ok('onaylı modda talep beklemede', r1.status === 'pending')
-ok('aynı kişi üst üste binen 2. randevu alamaz', (await err(bookB(B, '10:00'))) === 'CUSTOMER_OVERLAP')
-ok('çalışma saati dışı (12:00) reddedilir', (await err(B.call('book')({ businessId: bid, serviceId: sid, startsAt: at(dayKey(11), '12:00'), consent: true }))) === 'SLOT_TAKEN')
-ok('müşteri randevu listesini doğrudan okuyamaz', /permission|false for/i.test(await err(getDocs(collection(B.db, 'businesses', bid, 'bookings')))))
-ok('müşteri müşteri kartlarını okuyamaz', /permission|false for/i.test(await err(getDocs(collection(B.db, 'businesses', bid, 'customers')))))
-ok('müşteri randevuyu doğrudan yazamaz', /permission|false for/i.test(await err(addDoc(collection(B.db, 'businesses', bid, 'bookings'), { x: 1 }))))
-ok('randevularım: 1', (await B.call('myBookings')({})).length === 1)
+ok('müşteri tüm randevuları okuyamaz', await denied(getDocs(collection(C.db, 'businesses', bid, 'bookings'))))
+ok('müşteri başkasının randevusunu okuyamaz', await denied(getDoc(doc(C.db, 'businesses', bid, 'bookings', b1.ref.id))))
+ok('müşteri kendi randevusunu okur', await works(getDoc(doc(B.db, 'businesses', bid, 'bookings', b1.ref.id))))
+ok('müşteri müşteri listesini okuyamaz', await denied(getDocs(collection(C.db, 'businesses', bid, 'customers'))))
+ok('başkasının randevusunun kilidini silemez', await denied((async () => { const w = writeBatch(C.db); w.delete(doc(C.db, 'businesses', bid, 'cells', `${rid}_${cellOf(at(D, '10:00').getTime())}`)); await w.commit() })()))
+ok('başkasının randevusunu iptal edemez', await denied(updateDoc(doc(C.db, 'businesses', bid, 'bookings', b1.ref.id), { status: 'cancelled', active: false, cancelled_by: 'customer', cancel_reason: null, updated_at: Timestamp.now() })))
+ok('boş saatler (dolu dilimler) herkese açık', await works(getDocs(collection(C.db, 'businesses', bid, 'cells'))))
 
-// 3) C aynı saate
-await C.call('updateMyName')({ name: 'Cem Müşteri' })
-ok('dolu saat reddedilir', (await err(bookB(C, '10:00'))) === 'SLOT_TAKEN')
-ok('ızgara dışı saat (11:20) reddedilir', (await err(bookB(C, '11:20'))) === 'SLOT_TAKEN')
-s = await slots(anon)
-ok('boş saat 7 kaldı', s.length === 7, s.length)
-ok('ara süre: 11:00 hâlâ müsait (10:50 + 10 dk)', s.some((x) => x.starts_at === at(D, '11:00')))
+// ---- iptal ----
+async function cancel(u, ref, start) {
+  const w = writeBatch(u.db)
+  w.update(ref, { status: 'cancelled', active: false, cancelled_by: 'customer', cancel_reason: 'işim çıktı', updated_at: Timestamp.now() })
+  for (let c = cellOf(start.getTime()); c <= cellOf(start.getTime() + 60 * 60_000 - 1); c++) w.delete(doc(u.db, 'businesses', bid, 'cells', `${rid}_${c}`))
+  return w.commit()
+}
+ok('müşteri kendi bekleyen randevusunu iptal eder, saat boşalır', await works(cancel(B, b1.ref, at(D, '10:00'))))
+const c1 = bookBatch(C, { start: at(D, '10:00'), phone: '+905300000003' })
+ok('boşalan saati başkası alır', await works(c1.commit()))
 
-// 4) Haftalık sınır
-await owner.call('updateBusiness')({ businessId: bid, patch: { weekly_limit_per_customer: 1 } })
-ok('haftalık sınır', (await err(bookB(B, '15:00'))) === 'WEEKLY_LIMIT')
-await owner.call('updateBusiness')({ businessId: bid, patch: { weekly_limit_per_customer: null } })
-ok('müşteri işletme ayarını değiştiremez', (await err(C.call('updateBusiness')({ businessId: bid, patch: { name: 'hack' } }))) === 'FORBIDDEN')
-ok('müşteri çalışma saatlerini değiştiremez', /permission|false for/i.test(await err(updateDoc(doc(C.db, 'businesses', bid, 'resources', rid), { hours: [] }))))
+// ---- ekip işlemleri + geç iptal ----
+ok('sahip randevuyu onaylar', await works(updateDoc(doc(owner.db, 'businesses', bid, 'bookings', c1.ref.id), { status: 'confirmed', active: true, updated_at: Timestamp.now() })))
+ok('sahip iptal süresini değiştirir', await works(updateDoc(doc(owner.db, 'businesses', bid), { cancel_until_min: 43200 })))
+ok('onaylı randevu süre geçtikten sonra müşteri tarafından iptal edilemez', await denied(cancel(C, c1.ref, at(D, '10:00'))))
+ok('müşteri işletme ayarını değiştiremez', await denied(updateDoc(doc(C.db, 'businesses', bid), { name: 'hack' })))
+ok('müşteri çalışma saatlerini değiştiremez', await denied(updateDoc(doc(C.db, 'businesses', bid, 'resources', rid), { hours: [] })))
+ok('müşteri kapalı zaman ekleyemez', await denied(setDoc(doc(C.db, 'businesses', bid, 'timeOff', 'x'), { resource_id: null, starts_at: Timestamp.now(), ends_at: Timestamp.fromMillis(Date.now() + 1e6) })))
+ok('müşteri engelli listesine yazamaz', await denied(setDoc(doc(C.db, 'businesses', bid, 'blocked', '+905300000004'), { at: 1 })))
 
-// 5) Kapalı zaman (13-15)
-await addDoc(collection(owner.db, 'businesses', bid, 'timeOff'), { resource_id: null, starts_at: Timestamp.fromDate(new Date(at(D, '13:00'))), ends_at: Timestamp.fromDate(new Date(at(D, '15:00'))), reason: 'Toplantı' })
-s = await slots(anon)
-ok('kapalı zaman sonrası 5 saat', s.length === 5, s.length)
-ok('müşteri kapalı zaman ekleyemez', /permission|false for/i.test(await err(addDoc(collection(C.db, 'businesses', bid, 'timeOff'), { resource_id: null, starts_at: Timestamp.now(), ends_at: Timestamp.now(), reason: null }))))
+// ---- engelleme ----
+ok('sahip numarayı engeller', await works(setDoc(doc(owner.db, 'businesses', bid, 'blocked', '+905300000004'), { at: Timestamp.now() })))
+ok('engelli numara randevu alamaz', await denied(bookBatch(Dd, { start: at(D, '16:00'), phone: '+905300000004' }).commit()))
 
-// 6) Telefonla arayan D'yi sahip elle ekler; D sonra giriş yapınca kartı sahiplenir
-await owner.call('staffCreateBooking')({ businessId: bid, serviceId: sid, resourceId: rid, startsAt: at(D, '16:00'), name: 'Deniz (telefon)', phone: '0530 000 00 04' })
-ok('ekip de çakışan saate ekleyemez', (await err(owner.call('staffCreateBooking')({ businessId: bid, serviceId: sid, resourceId: rid, startsAt: at(D, '16:30'), name: 'X Y' }))) === 'SLOT_TAKEN')
-ok('müşteri ekip işlemi yapamaz', (await err(C.call('staffCreateBooking')({ businessId: bid, serviceId: sid, resourceId: rid, startsAt: at(D, '17:00'), name: 'X Y' }))) === 'FORBIDDEN')
-await Dd.call('updateMyName')({ name: 'Deniz Doğan' })
-await Dd.call('book')({ businessId: bid, serviceId: sid, startsAt: at(dayKey(11), '09:00'), consent: true })
-ok('D iki randevusunu da görür', (await Dd.call('myBookings')({})).length === 2)
-const custs = (await getDocs(collection(owner.db, 'businesses', bid, 'customers'))).docs.map((d) => d.data())
-ok('D için tek müşteri kartı', custs.filter((c) => c.phone === '+905300000004').length === 1)
+// ---- ekip daveti ----
+const staff = await user('google', 'ekip')
+const inv = doc(collection(owner.db, 'invites'))
+ok('sahip davet oluşturur', await works(setDoc(inv, { business_id: bid, resource_id: rid, created_by: owner.uid, used_by: null, used_at: null, expires_at: Timestamp.fromMillis(Date.now() + 864e5) })))
+ok('davetsiz kişi ekip üyesi olamaz', await denied(setDoc(doc(other.db, 'businesses', bid, 'members', other.uid), { uid: other.uid, business_id: bid, role: 'staff', invite_code: 'uydurma' })))
+async function accept(u, code) {
+  const w = writeBatch(u.db)
+  w.set(doc(u.db, 'businesses', bid, 'members', u.uid), { uid: u.uid, business_id: bid, role: 'staff', resource_id: rid, full_name: 'Ekip', invite_code: code })
+  w.set(doc(u.db, 'users', u.uid, 'memberships', bid), { business_id: bid })
+  w.update(doc(u.db, 'invites', code), { used_by: u.uid, used_at: Timestamp.now() })
+  return w.commit()
+}
+ok('davetli ekibe katılır', await works(accept(staff, inv.id)))
+ok('davet ikinci kez kullanılamaz', await denied(accept(other, inv.id)))
+ok('ekip üyesi randevuları okur', await works(getDocs(collection(staff.db, 'businesses', bid, 'bookings'))))
+ok('ekip üyesi ayar değiştiremez', await denied(updateDoc(doc(staff.db, 'businesses', bid), { name: 'x' })))
+ok('ekip de dolu saate randevu ekleyemez', await denied(bookBatch(staff, { start: at(D, '10:00'), status: 'confirmed', source: 'staff' }).commit()))
 
-// 7) Onay + iptal kuralları
-const bk = (await getDocs(collection(owner.db, 'businesses', bid, 'bookings'))).docs.find((d) => d.data().customer_user_id === B.uid)
-await owner.call('staffUpdateBooking')({ businessId: bid, bookingId: bk.id, status: 'confirmed' })
-await owner.call('updateBusiness')({ businessId: bid, patch: { cancel_until_min: 43200 } })
-ok('geç iptal reddedilir', (await err(B.call('cancelMyBooking')({ businessId: bid, bookingId: bk.id }))) === 'CANCEL_TOO_LATE')
-await owner.call('updateBusiness')({ businessId: bid, patch: { cancel_until_min: 60 } })
-ok('başkasının randevusu iptal edilemez', (await err(C.call('cancelMyBooking')({ businessId: bid, bookingId: bk.id }))) === 'NOT_FOUND')
-await B.call('cancelMyBooking')({ businessId: bid, bookingId: bk.id, reason: 'işim çıktı' })
-ok('iptal sonrası saat boşaldı', (await slots(anon)).some((x) => x.starts_at === at(D, '10:00')))
-ok('iptal edilen randevu geri açılınca yine çakışma kontrolünden geçer', (await err((async () => {
-  await bookB(C, '10:00')
-  await owner.call('staffUpdateBooking')({ businessId: bid, bookingId: bk.id, status: 'confirmed' })
-})())) === 'SLOT_TAKEN')
-
-// 8) Engelleme
-await updateDoc(doc(owner.db, 'businesses', bid, 'customers', C.uid), { is_blocked: true })
-ok('ekip müşteri kartını başka kullanıcıya bağlayamaz', /permission|false for/i.test(await err(updateDoc(doc(owner.db, 'businesses', bid, 'customers', C.uid), { user_id: B.uid }))))
-ok('ekip doğrulanmış numarayı değiştiremez', /permission|false for/i.test(await err(updateDoc(doc(owner.db, 'businesses', bid, 'customers', C.uid), { phone: '+905559999999' }))))
-ok('engelli numara randevu alamaz', (await err(C.call('book')({ businessId: bid, serviceId: sid, startsAt: at(dayKey(12), '09:00'), consent: true }))) === 'BLOCKED')
-
-// 9) Giriş yapmamış ziyaretçi
-ok('ziyaretçi randevu alamaz', (await err(anon.call('book')({ businessId: bid, serviceId: sid, startsAt: at(D, '17:00'), consent: true }))) === 'AUTH_REQUIRED')
-
-// 10) Ekip daveti
-const inviteRef = await addDoc(collection(owner.db, 'invites'), { business_id: bid, resource_id: rid, created_by: owner.uid, used_by: null, used_at: null, expires_at: Timestamp.fromMillis(Date.now() + 864e5) })
-ok('müşteri davet oluşturamaz', /permission|false for/i.test(await err(addDoc(collection(C.db, 'invites'), { business_id: bid, resource_id: null, created_by: C.uid, used_by: null, used_at: null, expires_at: Timestamp.now() }))))
-const staff = await phoneUser('+905300000009')
-await staff.call('updateMyName')({ name: 'Ekip Üyesi' })
-await staff.call('acceptInvite')({ code: inviteRef.id })
-ok('ekip üyesi randevuları okur', (await getDocs(collection(staff.db, 'businesses', bid, 'bookings'))).size > 0)
-ok('davet ikinci kez kullanılamaz', (await err(B.call('acceptInvite')({ code: inviteRef.id }))) === 'INVITE_INVALID')
-ok('ekip üyesi ayar değiştiremez', (await err(staff.call('updateBusiness')({ businessId: bid, patch: { name: 'x' } }))) === 'FORBIDDEN')
-
-// 11) YARIŞ: 20 kişi aynı anda aynı saate (anında onay modunda)
-await owner.call('updateBusiness')({ businessId: bid, patch: { booking_mode: 'instant' } })
-const R = dayKey(13)
-const racers = await Promise.all(Array.from({ length: 20 }, (_, i) => phoneUser(`+9055500000${String(i).padStart(2, '0')}`)))
-await Promise.all(racers.map((u, i) => u.call('updateMyName')({ name: `Yarışçı ${i}` })))
-const target = (await slots(anon, R))[0].starts_at
-const results = await Promise.all(racers.map((u) => err(u.call('book')({ businessId: bid, serviceId: sid, startsAt: target, consent: true }))))
+// ---- YARIŞ: 20 kişi aynı anda aynı saate ----
+const racers = await Promise.all(Array.from({ length: 20 }, (_, i) => user('anon', `y${i}`)))
+const target = at(dayKey(6), '14:00')
+const results = await Promise.all(racers.map((u, i) => bookBatch(u, { start: target, phone: `+9055500000${String(i).padStart(2, '0')}` }).commit()
+  .then(() => 'OK', (e) => (/permission/i.test(e.message) ? 'REDDEDİLDİ' : e.message.split('\n')[0]))))
 const wins = results.filter((r) => r === 'OK').length
-const stored = (await getDocs(collection(owner.db, 'businesses', bid, 'bookings'))).docs.filter((d) => d.data().active && d.data().starts_at.toDate().toISOString() === target).length
-console.log('     yarış sonuçları:', JSON.stringify(results.reduce((a, r) => ({ ...a, [r]: (a[r] ?? 0) + 1 }), {})))
+const stored = (await getDocs(collection(owner.db, 'businesses', bid, 'bookings'))).docs.filter((d) => d.data().active && d.data().starts_at.toMillis() === target.getTime()).length
+console.log('     yarış:', JSON.stringify(results.reduce((a, r) => ({ ...a, [r]: (a[r] ?? 0) + 1 }), {})))
 ok(`yarış: 20 eşzamanlı istekten tam 1 kazanan (kazanan=${wins}, kayıt=${stored})`, wins === 1 && stored === 1)
 
-// 12) Verilerimi sil
-await B.call('forgetMe')({})
-const bCard = (await getDoc(doc(owner.db, 'businesses', bid, 'customers', B.uid))).data()
-ok('verilerimi sil: ad ve numara silinir', bCard.name === 'Silinmiş kullanıcı' && bCard.phone === null)
-
-for (const u of [owner, B, C, Dd, anon, staff, ...racers]) await deleteApp(u.app)
-console.log(failed ? `\n${failed} TEST BAŞARISIZ, ${n} geçti` : `\nTÜM TESTLER GEÇTİ (${n})`)
+for (const u of [owner, anonOwner, other, B, C, Dd, staff, ...racers]) await deleteApp(u.app)
+console.log(failed ? `\n${failed} TEST BAŞARISIZ, ${passed} geçti` : `\nTÜM KURAL TESTLERİ GEÇTİ (${passed})`)
 process.exit(failed ? 1 : 0)

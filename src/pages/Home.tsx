@@ -6,7 +6,7 @@ import { load, recentPlaces } from '../lib/storage'
 
 export default function Home() {
   const nav = useNavigate()
-  const { session } = useAuth()
+  const { isRealUser } = useAuth()
   const places = recentPlaces()
 
   // Ana ekrandan açıldıysa en son kullanılan yere götür (işletme sayfası ya da panel)
@@ -34,7 +34,7 @@ export default function Home() {
 
       <div className="tiles">
         <Link className="tile" to="/randevularim"><strong>Randevularım</strong><span className="muted small">Aldığınız randevuları görün, iptal edin</span></Link>
-        <Link className="tile" to={session ? '/panel' : '/giris?next=/panel'}><strong>İşletme paneli</strong><span className="muted small">Randevuları yönetin, saatlerinizi ayarlayın</span></Link>
+        <Link className="tile" to={isRealUser ? '/panel' : '/giris?next=/panel'}><strong>İşletme paneli</strong><span className="muted small">Randevuları yönetin, saatlerinizi ayarlayın</span></Link>
         <Link className="tile tile-accent" to="/yeni"><strong>İşletmenizi ekleyin</strong><span className="small">2 dakikada kurulum, ücretsiz deneyin</span></Link>
       </div>
 
@@ -43,7 +43,7 @@ export default function Home() {
         <ol className="steps-list">
           <li><strong>İşletme</strong> hizmetlerini, çalışma saatlerini, aralarını ve kurallarını kendisi girer.</li>
           <li>Kendi bağlantısını ya da QR kodunu müşterilerine verir.</li>
-          <li><strong>Müşteri</strong> boş saati seçer, telefonunu bir kez SMS ile doğrular, randevu hazır.</li>
+          <li><strong>Müşteri</strong> boş saati seçer, adını ve telefonunu yazar, randevu hazır. Hesap açmak yok.</li>
           <li>Aynı saate iki kişi asla yazılamaz; değişiklikler herkesin ekranına anında düşer.</li>
         </ol>
       </section>

@@ -10,9 +10,7 @@
     "typecheck": "tsc -b",
     "icons": "node scripts/make-icons.mjs",
     "test:ui": "bash scripts/test-ui.sh",
-    "test:firebase": "bash scripts/test-firebase.sh",
-    "deploy:backend": "firebase deploy --only firestore,functions",
-    "deploy:hosting": "npm run build && firebase deploy --only hosting"
+    "test:rules": "bash scripts/test-rules.sh"
   },
   "dependencies": {
     "firebase": "^12.19.0",

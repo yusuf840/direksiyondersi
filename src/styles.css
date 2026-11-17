@@ -343,3 +343,5 @@ button.list-row:hover, a.list-row:hover { background: var(--primary-soft); }
   body { background: #fff; color: #000; }
   .tl-item { break-inside: avoid; border: 1px solid #999; }
 }
+.btn-google { background: #fff; color: #1f2937; border-color: var(--border); }
+:root[data-theme="dark"] .btn-google { background: #fff; color: #1f2937; }

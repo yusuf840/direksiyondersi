@@ -1,7 +1,6 @@
 import { initializeApp } from 'firebase/app'
-import { connectAuthEmulator, getAuth } from 'firebase/auth'
+import { connectAuthEmulator, getAuth, GoogleAuthProvider, signInWithCredential } from 'firebase/auth'
 import { connectFirestoreEmulator, getFirestore } from 'firebase/firestore'
-import { connectFunctionsEmulator, getFunctions } from 'firebase/functions'
 
 const env = import.meta.env
 const useEmulators = env.VITE_USE_EMULATORS === '1'
@@ -21,13 +20,12 @@ export const app = initializeApp(useEmulators
 export const auth = getAuth(app)
 auth.languageCode = 'tr'
 export const db = getFirestore(app)
-// Cloud Functions bölgesi: functions/src/index.ts içindeki setGlobalOptions ile aynı olmalı
-export const fns = getFunctions(app, 'europe-west1')
 
 if (useEmulators) {
   const host = env.VITE_EMULATOR_HOST || '127.0.0.1'
   connectAuthEmulator(auth, `http://${host}:9099`, { disableWarnings: true })
   connectFirestoreEmulator(db, host, 8080)
-  connectFunctionsEmulator(fns, host, 5001)
-  auth.settings.appVerificationDisabledForTesting = true
+  // Sadece yerel test (emülatör) derlemesi: Google penceresi açmadan sahte Google hesabıyla giriş
+  ;(window as unknown as Record<string, unknown>).__emuGoogleSignIn = (name: string) =>
+    signInWithCredential(auth, GoogleAuthProvider.credential(JSON.stringify({ sub: name, email: `${name}@ornek.com`, email_verified: true, name })))
 }

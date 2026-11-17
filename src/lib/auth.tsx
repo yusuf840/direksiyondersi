@@ -5,8 +5,10 @@ import { getProfile } from './api'
 
 interface Profile { id: string; full_name: string | null; phone: string | null }
 interface AuthState {
-  /** Giriş yapmış kullanıcı (telefonla doğrulanmış) */
+  /** Oturum: müşteride cihaza bağlı anonim oturum, işletmede Google hesabı */
   session: User | null
+  /** Google ile giriş yapmış (işletme sahibi / ekip) */
+  isRealUser: boolean
   profile: Profile | null
   loading: boolean
   refreshProfile: () => Promise<void>
@@ -23,7 +25,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const loadProfile = useCallback(async (u: User | null) => {
     if (!u) { setProfile(null); return }
     const p = await getProfile(u.uid).catch(() => null)
-    setProfile({ id: u.uid, full_name: p?.full_name ?? null, phone: u.phoneNumber })
+    setProfile({ id: u.uid, full_name: p?.full_name ?? u.displayName ?? null, phone: p?.phone ?? null })
   }, [])
 
   useEffect(() => {
@@ -36,7 +38,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [loadProfile])
 
   const value: AuthState = {
-    session: user, profile, loading,
+    session: user, isRealUser: !!user && !user.isAnonymous, profile, loading,
     refreshProfile: () => loadProfile(auth.currentUser),
     signOut: async () => { await fbSignOut(auth); setProfile(null) },
   }

@@ -5,12 +5,12 @@ import { useAuth } from '../lib/auth'
 import { errText } from '../lib/errors'
 import { save } from '../lib/storage'
 import { Button, Empty, Notice, Spinner } from '../components/ui'
-import { PhoneLogin } from '../components/PhoneLogin'
+import { OwnerLogin } from '../components/OwnerLogin'
 
 /** Ekip daveti: /katil/:kod */
 export default function Join() {
   const { code = '' } = useParams()
-  const { session, profile } = useAuth()
+  const { isRealUser } = useAuth()
   const nav = useNavigate()
   const [info, setInfo] = useState<{ business_name: string; resource_name: string | null; valid: boolean } | null | undefined>(undefined)
   const [busy, setBusy] = useState(false)
@@ -36,7 +36,7 @@ export default function Join() {
       <h1>{info.business_name}</h1>
       <p className="lead">Ekibe katılmaya davet edildiniz{info.resource_name ? ` (${info.resource_name})` : ''}.</p>
       <div className="card">
-        {!session || !profile?.full_name ? <PhoneLogin onDone={() => {}} /> : (
+        {!isRealUser ? <OwnerLogin intro="Ekibe katılmak için Google hesabınızla girin." /> : (
           <div className="stack">
             {error ? <Notice kind="danger">{error}</Notice> : null}
             <Button loading={busy} onClick={() => void accept()}>Ekibe katıl</Button>

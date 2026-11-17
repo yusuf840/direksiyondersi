@@ -299,7 +299,7 @@ function TimeOffs() {
   const tz = biz.timezone
   const [list, setList] = useState<TimeOff[]>([])
   const [adding, setAdding] = useState(false)
-  const [f, setF] = useState({ resource_id: '', allDay: true, from: '', to: '', start: '', end: '', reason: '' })
+  const [f, setF] = useState({ resource_id: '', allDay: true, from: '', to: '', start: '', end: '' })
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState<string | null>(null)
 
@@ -324,7 +324,7 @@ function TimeOffs() {
     // Bu aralıkta zaten randevu var mı? Uyar ama engelleme (mevcut randevular kendiliğinden iptal olmaz).
     const count = await api.countActiveOverlapping(biz.id, s, e, f.resource_id || null).catch(() => 0)
     if (count && !confirm(`Bu aralıkta ${count} aktif randevu var. Kapalı zaman eklenecek ama o randevular iptal edilmeyecek; ajandadan tek tek iptal edip müşterilere haber verebilirsiniz. Devam?`)) { setBusy(false); return }
-    try { await api.addTimeOff(biz.id, { resource_id: f.resource_id || null, starts_at: s, ends_at: e, reason: f.reason.trim() || null }) } catch (er) { setBusy(false); return setErr(errText(er)) }
+    try { await api.addTimeOff(biz.id, { resource_id: f.resource_id || null, starts_at: s, ends_at: e }) } catch (er) { setBusy(false); return setErr(errText(er)) }
     setBusy(false)
     toast('Eklendi', 'success'); setAdding(false); void load()
   }
@@ -347,13 +347,13 @@ function TimeOffs() {
         <div className="list">
           {list.map((t) => (
             <div key={t.id} className="list-row">
-              <span><strong>{label(t)}</strong><span className="muted small"> · {t.resource_id ? resources.find((r) => r.id === t.resource_id)?.name : 'Tüm işletme'}{t.reason ? ` · ${t.reason}` : ''}</span></span>
+              <span><strong>{label(t)}</strong><span className="muted small"> · {t.resource_id ? resources.find((r) => r.id === t.resource_id)?.name : 'Tüm işletme'}</span></span>
               <button className="icon-btn" aria-label="Kaldır" onClick={() => void remove(t.id)}>✕</button>
             </div>
           ))}
         </div>
       )}
-      <Button variant="secondary" onClick={() => { setF({ resource_id: role === 'staff' ? myResourceId ?? '' : '', allDay: true, from: todayKey(tz), to: '', start: '', end: '', reason: '' }); setErr(null); setAdding(true) }}>+ Kapalı zaman ekle</Button>
+      <Button variant="secondary" onClick={() => { setF({ resource_id: role === 'staff' ? myResourceId ?? '' : '', allDay: true, from: todayKey(tz), to: '', start: '', end: '' }); setErr(null); setAdding(true) }}>+ Kapalı zaman ekle</Button>
 
       <Sheet open={adding} onClose={() => setAdding(false)} title="Kapalı zaman" footer={<Button loading={busy} onClick={() => void add()}>Ekle</Button>}>
         <div className="stack">
@@ -378,7 +378,6 @@ function TimeOffs() {
               </div>
             </>
           )}
-          <Field label="Sebep (sadece ekip görür)"><input className="input" value={f.reason} maxLength={120} onChange={(e) => setF({ ...f, reason: e.target.value })} /></Field>
           {err ? <Notice kind="danger">{err}</Notice> : null}
         </div>
       </Sheet>

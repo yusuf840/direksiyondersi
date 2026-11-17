@@ -6,23 +6,16 @@ const EMU = 'http://127.0.0.1:9099/emulator/v1/projects/demo-randevu/verificatio
 const OUT = __dirname + '/shots/'
 require('fs').mkdirSync(OUT, { recursive: true })
 
-async function smsCode(phoneE164) {
-  for (let i = 0; i < 20; i++) {
-    const { verificationCodes } = await fetch(EMU).then((r) => r.json())
-    const c = verificationCodes.filter((x) => x.phoneNumber === phoneE164).pop()
-    if (c) return c.code
-    await new Promise((r) => setTimeout(r, 300))
-  }
-  throw new Error('SMS kodu bulunamadı: ' + phoneE164)
+// İşletme sahibi: Google ile giriş. Test ortamı apis.google.com'a erişemediği için Google penceresi yerine
+// emülatör derlemesindeki kancayla aynı Firebase kimlik bilgisiyle giriş yapılır.
+async function googleLogin(page, name) {
+  await page.getByRole('button', { name: 'Google ile giriş yap' }).waitFor()
+  await page.evaluate((n) => window.__emuGoogleSignIn(n), name)
 }
-
-async function login(page, local, e164, name) {
-  await page.getByPlaceholder('05XX XXX XX XX').fill(local)
-  await page.getByRole('button', { name: 'Kod gönder' }).click()
-  await page.getByLabel('SMS kodu').waitFor()
-  await page.getByLabel('SMS kodu').fill(await smsCode(e164))
-  await page.getByLabel('Ad soyad').waitFor()
+// Müşteri: hesapsız, sadece ad + telefon
+async function customerInfo(page, name, phone) {
   await page.getByLabel('Ad soyad').fill(name)
+  await page.getByLabel('Cep telefonunuz').fill(phone)
   await page.getByRole('button', { name: 'Devam', exact: true }).last().click()
 }
 
@@ -35,7 +28,7 @@ async function login(page, local, e164, name) {
     const p = await ctx.newPage()
     p.on('pageerror', (e) => errors.push('pageerror: ' + e.message))
     p.on('dialog', (d) => { dialogs.push(d.message()); d.accept() })
-    p.on('console', (m) => { if (m.type() === 'error' && !/favicon|ERR_|Failed to load resource/.test(m.text())) errors.push('console: ' + m.text()) })
+    p.on('console', (m) => { if (m.type() === 'error' && !/favicon|ERR_|Failed to load resource/.test(m.text())) { if (!/apis\.google\.com|fonts\.g/.test(m.text())) errors.push('console: ' + m.text()) } })
     return p
   }
   const shot = (p, name) => p.waitForTimeout(300).then(() => p.screenshot({ path: OUT + name + '.png' }))
@@ -43,7 +36,8 @@ async function login(page, local, e164, name) {
   // 1) İşletme sahibi: telefonla giriş + kurulum sihirbazı
   const owner = await mk()
   await owner.goto(BASE + '/yeni')
-  await login(owner, '0530 000 00 11', '+905300000011', 'Gül Usta')
+  await googleLogin(owner, 'Gul Usta')
+  await owner.getByLabel('İşletme adı').waitFor()
   await owner.getByLabel('İşletme adı').fill('Kuaför Gül')
   await owner.getByText('✓ Uygun').waitFor(); await shot(owner, '01-onb-1')
   await owner.getByRole('button', { name: 'İleri' }).click()
@@ -70,7 +64,7 @@ async function login(page, local, e164, name) {
   await cust.goto(BASE + '/kuafor-gul'); await cust.locator('.slot').first().waitFor(); await shot(cust, '04-book')
   await cust.locator('.slot').first().click()
   await cust.getByRole('button', { name: 'Devam' }).click()
-  await login(cust, '05300000022', '+905300000022', 'Mehmet Müşteri')
+  await customerInfo(cust, 'Mehmet Müşteri', '0530 000 00 22')
   await cust.getByText('Randevuyu onayla').first().waitFor(); await shot(cust, '05-confirm')
   await cust.locator('.check input').check()
   await cust.getByRole('button', { name: /Randevu talebi gönder/ }).click()

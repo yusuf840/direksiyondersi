@@ -77,7 +77,7 @@ export default function Customers() {
               <span><strong>{history.filter((h) => h.status === 'cancelled' && h.cancelled_by === 'customer').length}</strong> iptal</span>
             </div>
             <Field label="Ad"><input className="input" value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} /></Field>
-            <Field label="Telefon" hint={sel.user_id ? 'Müşteri bu numarayı SMS ile doğruladı; değiştirilemez.' : undefined}>
+            <Field label="Telefon" hint={sel.user_id ? 'Müşterinin kendi girdiği numara; değiştirilemez.' : undefined}>
               <input className="input" value={sel.user_id ? displayPhone(draft.phone) : draft.phone} disabled={!!sel.user_id} onChange={(e) => setDraft({ ...draft, phone: e.target.value })} />
             </Field>
             <Field label="Not (sadece ekip görür)"><textarea className="input" rows={2} value={draft.note} onChange={(e) => setDraft({ ...draft, note: e.target.value })} /></Field>

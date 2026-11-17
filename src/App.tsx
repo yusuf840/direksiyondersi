@@ -19,7 +19,7 @@ const Settings = lazy(() => import('./pages/panel/Settings'))
 const Share = lazy(() => import('./pages/panel/Share'))
 
 function TopBar() {
-  const { session } = useAuth()
+  const { isRealUser } = useAuth()
   const loc = useLocation()
   const inPanel = loc.pathname.startsWith('/panel')
   return (
@@ -27,7 +27,7 @@ function TopBar() {
       <Link to="/" className="brand"><img src="/icon.svg" alt="" width={26} height={26} />{APP_NAME}</Link>
       <nav className="row-gap">
         {!inPanel ? <Link className="link small" to="/randevularim">Randevularım</Link> : null}
-        {session && !inPanel ? <Link className="link small" to="/panel">Panel</Link> : null}
+        {isRealUser && !inPanel ? <Link className="link small" to="/panel">Panel</Link> : null}
         <ThemeToggle />
       </nav>
     </header>

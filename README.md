@@ -1,132 +1,79 @@
 # Randevu
 
-Telefonla aramanın yerini alacak kadar basit, her türlü işletmenin kullanabileceği bir randevu uygulaması (PWA). Altyapı **Firebase**.
+Telefonla aramanın yerini alacak kadar basit, her türlü işletmenin kullanabileceği bir randevu uygulaması (PWA).
+Altyapı **Firebase'in ücretsiz planı (Spark)** ile çalışır. Kredi kartı, sunucu kodu ve komut satırı gerekmez.
 
-> Önceki sürüm olan *Direksiyon Dersi Programı* üzerine kuruldu. Sektöre özel hiçbir şey (ders, hoca, 50 dakika, 08:00–17:00) kodda sabit değildir. Bunların hepsini işletme kendisi ayarlar.
+> Önceki sürüm olan *Direksiyon Dersi Programı* üzerine kuruldu. Sektöre özel hiçbir şey (ders, hoca, 50 dakika, 08:00–17:00) kodda sabit değildir. Hepsini işletme kendisi ayarlar.
 
-## Temel ilkeler
+## Nasıl çalışır?
 
-| İlke | Uygulamadaki karşılığı |
+| | |
 |---|---|
-| **Aramaktan daha kolay olmalı** | Müşteri bağlantıyı açar, hizmeti, günü ve saati seçer. Telefonunu bir kez SMS ile doğrular, randevu hazır olur. Uygulama indirmek, şifre ya da e-posta gerekmez. |
-| **Kuralları işletme koyar** | Hizmetler, süreler, randevu sonrası ara, saat aralığı, çalışma saatleri, öğle arası gibi molalar, tatil ve izinler, onay modu, iptal süresi, haftalık sınır. Hepsi Ayarlar'dan girilir. Kurulumda saat alanları bile boş gelir. |
-| **Sıfatsız** | "Ders/hoca" yerine *hizmet* ve *kaynak* var. Kaynağın adını işletme seçer: Personel, Eğitmen, Usta, Saha, Masa, Araç… |
-| **Çakışma imkânsız olmalı** | Randevu yalnızca sunucuda (Cloud Functions) bir işlem (transaction) içinde yazılır. Aynı kaynak ve gün için eşzamanlı istekler sıraya girer. |
-| **Sahte hesap ve spam olmamalı** | Her hesap SMS ile doğrulanmış bir telefon numarasıdır. Bunun üstüne açık randevu sınırı, haftalık sınır ve numara engelleme gelir. |
-| **Herkes aynı anda aynı şeyi görmeli** | Biri saat aldığında açık olan diğer müşteri ekranlarında o saat hemen kaybolur. İşletme paneline yeni talep sesli bildirimle düşer. |
+| **Müşteri** | İşletmenin bağlantısını ya da QR kodunu açar. Hizmeti, günü ve saati seçip adını ve telefonunu yazar, randevu hazır olur. Hesap açmaz, şifre ya da e-posta girmez. Randevuları o cihazda "Randevularım" sayfasında görünür. |
+| **İşletme sahibi** | Google hesabıyla tek tıkla girer ve 4 adımda kurar: ad, kaynak (Personel/Usta/Saha…), ilk hizmet, çalışma saatleri. Ardından bağlantı ve QR kodu hazırdır. |
+| **Ekip** | Sahip bir davet bağlantısı gönderir. Ekip üyesi Google ile girip katılır, ajandayı ve müşterileri görür. Ayarları değiştiremez. |
+| **Telefonla arayan müşteri** | İşletme randevuyu panelden "+ Randevu" ile elle ekler. |
 
-## Hesaplar ve işletme ile müşterinin bağlanması
+Hizmetler, süreler, randevu sonrası ara, saat aralığı, çalışma saatleri, öğle arası gibi molalar, tatil ve izin günleri, onay modu, iptal süresi ve haftalık sınır: **hepsini işletme Ayarlar'dan girer.**
 
-```
-              ┌──────────── telefon + SMS kodu (tek giriş yolu) ────────────┐
-   MÜŞTERİ    │  bağlantı/QR ─► /isletme-adi ─► hizmet ─► gün ─► saat ─► doğrula ─► randevu
-   İŞLETME    │  /yeni ─► ad + bağlantı ─► kaynak ─► ilk hizmet ─► saatler ─► bağlantı + QR
-   EKİP       │  sahip davet bağlantısı üretir ─► /katil/kod ─► doğrula ─► panele erişir
-              └──────────────────────────────────────────────────────────────┘
-```
+## Çakışma ve güvenlik
 
-- **Tek kimlik:** Aynı telefon numarası hem müşteri hem işletme sahibi olabilir. Rol, hesabın kendisinde değil işletmeye üyelikte tutulur.
-- **Telefonla arayan müşteri:** İşletme randevuyu panelden elle girer. O kişi daha sonra aynı numarayla giriş yaparsa (numara SMS ile doğrulandığı için güvenli şekilde) eski kaydı kendiliğinden ona bağlanır.
-- **Ana ekrana ekleme:** Uygulama ana ekrandan açıldığında en son kullanılan yerle açılır. Müşteri için bu işletme sayfası, sahip için paneldir.
+Kuralların tamamı `firestore.rules` dosyasında. Bu dosya Firebase Console'daki "Rules" sekmesine yapıştırılır.
 
-## Mimari
+- **Aynı saate iki randevu yazılamaz.** Her randevu, kapladığı her 5 dakikalık dilim için bir "dolu" kaydı oluşturur. Bu kayıtların üzerine yazılamaz; aynı dilimi ikinci kez almaya çalışan randevunun tamamı reddedilir. Test: 20 kişi aynı anda aynı saate bastı, 1 kişi kaydedildi, 19 kişi reddedildi.
+- **Müşteri ekranını atlayıp doğrudan veritabanına yazan biri bile şunları yapamaz:**
+  - başkasının randevusunu görmek, iptal etmek ya da kilidini silmek
+  - kendi randevusunu "onaylandı" yazmak
+  - hizmet süresini ya da randevu sonrası arayı kısaltmak
+  - "en az ne kadar önceden" ve "en fazla kaç gün ileri" kurallarını aşmak
+  - engellenmiş bir numarayla randevu almak
+  - işletme ayarlarını ya da çalışma saatlerini değiştirmek
+- **Müşteri listesini ve randevuları yalnızca ekip görür.** Herkese açık olan bilgiler: işletme vitrini, hizmetler, çalışma saatleri, kapalı günler ve dolu dilimler. Dolu dilimlerde isim veya numara yoktur.
 
-```
-Tarayıcı (React PWA)
-  ├─ okur: işletme vitrini, hizmetler, kaynaklar          ─┐
-  ├─ dinler: pulse/{işletme} (kişisel veri yok)            │  Firestore
-  ├─ ekip okur/dinler: randevular, müşteriler, izinler     │  (firestore.rules ile korunur)
-  ├─ sahip yazar: hizmetler, saatler, kapalı zamanlar     ─┘
-  └─ çağırır: book, cancelMyBooking, availableSlots …   ──►  Cloud Functions (europe-west1)
-                                                              kurallar + transaction + kilitler
-```
+**Ücretsiz planın sınırları (bilerek yapılan tercihler):**
+- **Telefon doğrulanmıyor.** Firebase, SMS'i yalnızca ücretli Blaze planında gönderiyor. Sahte randevuya karşı alınan önlemler:
+  - varsayılan **"Ben onaylayayım"** modu
+  - numara engelleme
+  - ileri tarih ve önceden haber sınırları
+- **"Açık randevu sınırı" ve "haftalık sınır" uygulama tarafından** (müşterinin cihazına göre) kontrol edilir. Çakışma kuralı ise veritabanı tarafından garanti edilir.
+- **Çalışma saati dışına randevu yazılmasını uygulama engeller.** Veritabanı kuralı bunu ayrıca kontrol etmez; kötü niyetli bir istek gelirse işletme onaylamayarak reddeder.
 
-| Dosya | Görevi |
-|---|---|
-| `functions/src/index.ts` | Randevu alma, iptal, işletme kurma ve güncelleme, ekip daveti, ekibin randevu ekleme ve düzenlemesi |
-| `functions/src/core.ts` | Boş saat hesaplama ve çakışma kilidi |
-| `firestore.rules` | Kim neyi okuyup yazabilir. Müşteri randevu tablosuna doğrudan yazamaz, başkasının adını ya da numarasını göremez. |
-| `firestore.indexes.json` | Sorguların ihtiyaç duyduğu indeksler |
-| `src/lib/api.ts` | Arayüzün tek veri katmanı |
+## Kurulum: sadece tarayıcıdan
 
-**Çakışma nasıl önleniyor?** Her randevu, kaynağın ilgili günü için bir kilit belgesini (`locks/…`) aynı işlemde okuyup yazar. Aynı kaynak ve aynı gün için gelen iki istek Firestore tarafından sıraya sokulur; ikinci istek ilkinin kaydını görür ve `SLOT_TAKEN` hatası alır. Emülatörde 20 kişi aynı anda aynı saate bastı ve tam 1 kişi kaydedildi (`npm run test:firebase`).
+### A) Firebase Console
 
-## Kurulum
+[console.firebase.google.com](https://console.firebase.google.com) adresinden mevcut projeyi açın (ya da yeni bir proje oluşturun). Ücretsiz Spark planı yeterli.
 
-Mevcut Firebase projesi (`direksiyon-dersi-29912`) kullanılır. Eski site Realtime Database'i, yeni sürüm ise Firestore'u kullandığı için ikisi aynı projede çakışmadan durabilir.
-
-### 1. Firebase Console (tarayıcıdan, yaklaşık 10 dakika)
-
-[console.firebase.google.com](https://console.firebase.google.com) → `direksiyon-dersi-29912` projesi:
-
-1. **Blaze planına geçin** (sol altta "Upgrade"). Cloud Functions ve SMS ile giriş bunu gerektiriyor.
-   - Kredi kartı istenir, ancak küçük bir işletmenin kullanımı büyük ölçüde ücretsiz kotaların içinde kalır. SMS'ler ise ayrıca ücretlendirilir.
-   - **Mutlaka bütçe uyarısı kurun:** Google Cloud → Billing → Budgets & alerts, örneğin 5 $.
-2. **Firestore Database → Create database**
+1. **Firestore Database → Create database**
    - Konum: `europe-west1` (Belçika). Konum sonradan değiştirilemez.
-   - Mod: *Production mode*. Kurallar 4. adımda yüklenecek.
-3. **Authentication → Get started → Sign-in method → Phone → Enable**
-   - **Phone numbers for testing:** `+90 530 000 00 01` → `123456` gibi birkaç numara ekleyin. Deneme sırasında SMS gitmez, para harcanmaz.
-   - **Settings → SMS region policy → Allow → yalnızca Türkiye.** Yurt dışı numaralarla SMS dolandırıcılığına karşı önemli.
-   - **Settings → Authorized domains:** Vercel adresinizi ekleyin (`xxx.vercel.app`) ve alan adı aldığınızda onu da ekleyin. Eklenmezse SMS ile giriş çalışmaz.
-4. **Proje ayarları (⚙) → Genel → Uygulamalarınız:** Web uygulaması yoksa `</>` ile ekleyin. Gösterilen `apiKey`, `authDomain`, `projectId` ve `appId` değerlerini not edin.
+   - Mod: **Production mode** ("test mode" seçmeyin; o mod 30 gün boyunca veritabanını herkese açar).
+   - Oluştuktan sonra **Rules** sekmesine gidin, içindekileri silin, bu repodaki [`firestore.rules`](firestore.rules) dosyasının **tamamını** yapıştırıp **Publish**'e basın.
+2. **Authentication → Get started → Sign-in method**
+   - **Google** → Enable → destek e-postanızı seçin → Save
+   - **Anonymous** → Enable → Save. Müşteriler hesap açmadan randevu alabilsin diye gerekli.
+3. **Authentication → Settings → Authorized domains → Add domain:** Vercel adresiniz (`xxx.vercel.app`). Alan adı aldığınızda onu da ekleyin. Eklenmezse Google ile giriş çalışmaz.
+4. **Proje ayarları (⚙) → Genel → Uygulamalarınız:** Web uygulaması yoksa `</>` ile ekleyin (Hosting kutusunu işaretlemeyin). Gösterilen `apiKey`, `authDomain`, `projectId` ve `appId` değerlerini kopyalayın.
 
-### 2. Sunucu tarafını yükleme (kendi bilgisayarınızdan, bir kez)
+### B) Vercel
 
-Node.js 22 kurulu olmalı. Önce Firebase komut satırı aracını kurun:
+1. **Add New → Project →** bu repoyu seçin (**Import**). Framework olarak **Vite** otomatik algılanır.
+2. **Environment Variables:**
 
-```bash
-npm install -g firebase-tools
-```
+   | Ad | Değer |
+   |---|---|
+   | `VITE_FIREBASE_API_KEY` | apiKey |
+   | `VITE_FIREBASE_AUTH_DOMAIN` | authDomain |
+   | `VITE_FIREBASE_PROJECT_ID` | projectId |
+   | `VITE_FIREBASE_APP_ID` | appId |
 
-```bash
-firebase login
-```
+3. **Deploy.** Çıkan adresi A-3 adımındaki **Authorized domains** listesine ekleyin.
+4. `https://xxx.vercel.app/yeni` adresinde Google ile girin ve işletmenizi kurun.
 
-Kodu indirip `randevu` dalına geçin:
-
-```bash
-git clone -b randevu https://github.com/yusuf840/direksiyondersi
-```
-
-```bash
-cd direksiyondersi
-```
-
-Fonksiyonların bağımlılıklarını kurun:
-
-```bash
-npm --prefix functions install
-```
-
-Güvenlik kurallarını, indeksleri ve Cloud Functions'ı yükleyin:
-
-```bash
-firebase deploy --only firestore,functions
-```
-
-İlk yüklemede Google bazı servisleri (Cloud Build, Artifact Registry vb.) açmak için onay isteyebilir; "evet" deyin. İndekslerin oluşması birkaç dakika sürer.
-
-> Fonksiyon kodu ya da kurallar değiştiğinde aynı `firebase deploy` komutu tekrar çalıştırılır. Arayüz değişiklikleri ise Vercel'e otomatik gider.
-
-### 3. Vercel (arayüz)
-
-1. Vercel'de **Add New → Project →** `yusuf840/direksiyondersi` reposunu Import edin.
-2. **Settings → Git → Production Branch:** `randevu`.
-3. **Environment Variables:**
-   - `VITE_FIREBASE_API_KEY`
-   - `VITE_FIREBASE_AUTH_DOMAIN`
-   - `VITE_FIREBASE_PROJECT_ID`
-   - `VITE_FIREBASE_APP_ID`
-   - (isteğe bağlı) `VITE_APP_NAME`
-4. Deploy edin. Çıkan adresi Firebase'deki **Authorized domains** listesine eklemeyi unutmayın.
-5. `https://<proje>.vercel.app/yeni` adresine gidip test numarasıyla (kod `123456`) giriş yapın ve ilk işletmeyi kurun.
-
-> Vercel yerine Firebase Hosting de kullanılabilir: `npm run deploy:hosting`.
+Bu kadar. Sonraki her kod güncellemesi Vercel'e otomatik yansır. `firestore.rules` dosyası değişirse yeni halini Rules sekmesine yeniden yapıştırmanız yeterli.
 
 ### Eski sitenin verisi
 
-`main` dalındaki eski site Realtime Database'e herkese açık şekilde yazıyor; öğrenci adları ve telefonları dışarıdan okunabilir. Yeni sürüme geçtiğinizde:
+Eski site (`main` dalı) Realtime Database'e herkese açık şekilde yazıyor; öğrenci adları ve telefonları dışarıdan okunabilir. Yeni sürüme geçince:
 
 1. **Realtime Database → Rules** sayfasında kuralları şöyle yapıp yayınlayın:
    ```json
@@ -134,7 +81,7 @@ firebase deploy --only firestore,functions
    ```
 2. Eski veriye ihtiyacınız yoksa `ogrenciKayitlar` düğümünü silin. Saklamak istiyorsanız önce "Export JSON" ile indirin.
 
-## Geliştirme ve testler
+## Geliştirme ve testler (isteğe bağlı)
 
 Yerelde çalıştırmak için önce ortam dosyasını oluşturup Firebase değerlerinizi girin:
 
@@ -150,21 +97,11 @@ npm install
 npm run dev
 ```
 
-**Kural ve çakışma testleri** (Firebase emülatörü; Java 11+ gerekir):
+**Güvenlik kuralları testleri** (Firebase emülatörü; Java 11+ ve `firebase-tools` gerekir). Toplam 41 test var; kötü niyetli istemci senaryolarını ve 20 kişilik yarış testini kapsar:
 
 ```bash
-npm run test:firebase
+npm run test:rules
 ```
-
-Toplam 40 test var; kapsadıkları:
-- çakışma, ara süre, çalışma saati ve saat ızgarası kontrolü
-- haftalık sınır ve kapalı zaman
-- KVKK onayı ve numara engelleme
-- iptal süresi ve iptal sonrası saatin boşalması
-- yetkiler: müşteri başkasının verisini göremez, ekip ayar değiştiremez
-- telefonla arayan müşterinin kaydını sahiplenmesi
-- ekip daveti ve "verilerimi sil"
-- 20 kişilik yarış testi
 
 **Arayüz testi** (uygulama emülatöre bağlanır, Playwright tıklar; taklit veri yoktur):
 
@@ -172,28 +109,10 @@ Toplam 40 test var; kapsadıkları:
 npm run test:ui
 ```
 
-Test sırasıyla şunları yapar: SMS koduyla giriş, kurulum sihirbazı, müşterinin randevu alması, alınan saatin başka bir müşterinin ekranından anında kaybolması, talebin panele anında düşmesi, onay, WhatsApp şablonu, elle randevu ekleme, öğle arası tanımlama ve kapalı gün ekleme.
+Test sırasıyla şunları dener: Google ile giriş, kurulum sihirbazı, müşterinin hesapsız randevu alması, alınan saatin başka bir müşterinin ekranından anında kaybolması, talebin panele anında düşmesi, onay, WhatsApp şablonu, elle randevu ekleme, öğle arası tanımlama ve kapalı gün ekleme.
 
-## Eski sürümden farklar
+## İleride Blaze planına geçilirse
 
-| Eski (direksiyondersi) | Yeni |
-|---|---|
-| Öğrenci "uygunluk" bildirir, hoca otomatik plan çalıştırır | Müşteri boş saati kendisi seçer. Onaylı modda saat ayrılır, işletme onaylar. |
-| Hoca şifresi `12345` tarayıcı kodunda açıkça duruyor | Telefon + SMS ile giriş, yetki kontrolü sunucuda ve Firestore kurallarında |
-| Her kayıtta tüm liste baştan yazılıyor; eşzamanlı kayıtlar birbirini siliyor | Belge bazlı kayıt, transaction ve kilitlerle çakışma koruması |
-| Veritabanı herkese açık | Müşteri yalnızca kendi randevusunu görür; randevu tablosuna doğrudan yazma yok |
-| "Pazartesi 10:00" gibi tarihsiz kayıtlar | Gerçek tarih ve saat dilimi; geçmiş tutuluyor |
-| Saatler, günler ve ders süresi kodda sabit | Hepsi işletme ayarlarında, kaynak başına ayrı ayrı |
-| Tek hoca | Birden çok kaynak, ekip daveti, hizmet–kaynak eşleşmesi |
-| WhatsApp şablonları | Korundu ve genelleştirildi (onay, hatırlatma, değişiklik, iptal) |
-| PDF ve Excel çıktısı | Excel uyumlu CSV ve yazdırma görünümü (PDF olarak kaydedilebilir) |
-
-## Yol haritası
-
-- [ ] Web Push: panel kapalıyken de yeni talep bildirimi (Firebase Cloud Messaging)
-- [ ] Otomatik hatırlatma (randevudan 1 gün önce): zamanlanmış fonksiyon, SMS ya da WhatsApp Business
-- [ ] Onaylanmayan talepler için süre aşımı (ör. 24 saat)
-- [ ] Bekleme listesi: dolu güne "yer açılırsa haber ver"
-- [ ] Grup ve kapasiteli hizmetler (aynı saate N kişi)
-- [ ] Personelin kendi iznini panelden girmesi (kurallar izin veriyor, arayüz şimdilik yalnızca sahibe açık)
-- [ ] App Check (bot koruması) ve KVKK metninin hukukçu tarafından son hali
+- SMS ile telefon doğrulama (Firebase Phone Auth)
+- Panel kapalıyken bildirim (Cloud Messaging) ve otomatik hatırlatma
+- Haftalık sınırın sunucu tarafında, numaraya göre kontrolü

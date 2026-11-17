@@ -1,97 +1,207 @@
 rules_version = '2';
-// Randevu — Firestore güvenlik kuralları
-// Randevu, müşteri kartı, işletme ayarı gibi kritik yazmalar Cloud Functions üzerinden yapılır.
-// İstemci sadece: herkese açık vitrini okur, ekip kendi işletmesini okur, sahip ayarlarını yazar.
+// =====================================================================
+//  Randevu — Firestore güvenlik kuralları (ücretsiz Spark planı ile çalışır)
+//  Kurulum: Firebase Console > Firestore Database > Rules sekmesi >
+//           bu dosyanın TAMAMINI yapıştırın > Publish
+// ---------------------------------------------------------------------
+//  ÇAKIŞMA KURALI: Her aktif randevu, kapladığı her 5 dakikalık dilim için
+//  businesses/{b}/cells/{kaynak}_{dilim} belgesini oluşturur. Bu belgeler
+//  sadece OLUŞTURULABİLİR (üzerine yazılamaz). Aynı dilimi ikinci kez almaya
+//  çalışan randevunun tamamı reddedilir -> aynı kaynağa üst üste randevu imkânsız.
+// =====================================================================
 service cloud.firestore {
   match /databases/{db}/documents {
+
+    // ---------- yardımcılar ----------
     function signedIn() { return request.auth != null; }
-    function memberDoc(b) { return /databases/$(db)/documents/businesses/$(b)/members/$(request.auth.uid); }
-    function isMember(b) { return signedIn() && exists(memberDoc(b)); }
-    function isOwner(b) { return signedIn() && exists(memberDoc(b)) && get(memberDoc(b)).data.role == 'owner'; }
+    function me() { return request.auth.uid; }
+    function isRealUser() { return signedIn() && request.auth.token.firebase.sign_in_provider != 'anonymous'; }
+    function bizPath(b) { return /databases/$(db)/documents/businesses/$(b); }
+    function memberPath(b) { return /databases/$(db)/documents/businesses/$(b)/members/$(me()); }
+    function isMember(b) { return signedIn() && exists(memberPath(b)); }
+    function isOwner(b) { return signedIn() && exists(memberPath(b)) && get(memberPath(b)).data.role == 'owner'; }
+    // Aynı toplu yazmada oluşturulan üyelik/işletme için (kurulum sihirbazı)
+    function isOwnerAfter(b) { return signedIn() && existsAfter(memberPath(b)) && getAfter(memberPath(b)).data.role == 'owner'; }
+    function isMemberAfter(b) { return signedIn() && existsAfter(memberPath(b)); }
+    function d() { return request.resource.data; }
     function onlyKeys(keys) { return request.resource.data.keys().hasOnly(keys); }
     function changed(keys) { return request.resource.data.diff(resource.data).affectedKeys().hasOnly(keys); }
-    function strMax(v, n) { return v is string && v.size() <= n; }
-    function optStr(v, n) { return v == null || strMax(v, n); }
+    function str(v, max) { return v is string && v.size() > 0 && v.size() <= max; }
+    function optStr(v, max) { return v == null || (v is string && v.size() <= max); }
     function intIn(v, a, b) { return v is int && v >= a && v <= b; }
+    function cellOf(t) { return int(math.floor(t.toMillis() / 300000)); }
+    function lastCellOf(t) { return int(math.floor((t.toMillis() - 1) / 300000)); }
+    function minutes(n) { return duration.value(n, 'm'); }
 
-    match /slugs/{slug} { allow read: if true; }
-    match /pulse/{b} { allow read: if true; }
-    match /users/{uid} { allow read: if signedIn() && request.auth.uid == uid; }
-    match /locks/{id} { allow read, write: if false; }
-
-    // "Üyesi olduğum işletmeler" sorgusu (collection group)
-    match /{path=**}/members/{uid} {
-      allow read: if signedIn() && resource.data.uid == request.auth.uid;
+    // ---------- herkese açık eşlemeler ----------
+    match /slugs/{slug} {
+      allow read: if true;
+      allow create: if isOwnerAfter(d().business_id)
+        && getAfter(bizPath(d().business_id)).data.slug == slug && onlyKeys(['business_id']);
+      allow delete: if isOwner(resource.data.business_id)
+        && getAfter(bizPath(resource.data.business_id)).data.slug != slug;
     }
 
+    // ---------- kullanıcının kendi alanı ----------
+    match /users/{uid} {
+      allow read, write: if signedIn() && me() == uid;
+      match /memberships/{b} {
+        allow read, delete: if signedIn() && me() == uid;
+        allow create: if signedIn() && me() == uid && isMemberAfter(b) && d().business_id == b;
+      }
+      match /myBookings/{k} {
+        allow read, delete: if signedIn() && me() == uid;
+        allow create: if signedIn() && me() == uid;
+      }
+    }
+
+    // ---------- ekip daveti ----------
     match /invites/{code} {
-      allow read, delete: if isOwner(resource.data.business_id);
-      allow create: if isOwner(request.resource.data.business_id)
-        && onlyKeys(['business_id', 'resource_id', 'created_by', 'expires_at', 'used_by', 'used_at'])
-        && request.resource.data.created_by == request.auth.uid
-        && request.resource.data.used_by == null
-        && request.resource.data.expires_at is timestamp
-        && request.resource.data.expires_at < request.time + duration.value(8, 'd');
+      allow read: if true; // kod rastgele ve tahmin edilemez; bilen davetlidir
+      allow create: if isOwner(d().business_id) && d().created_by == me() && d().used_by == null
+        && d().expires_at is timestamp && d().expires_at < request.time + duration.value(8, 'd');
+      allow update: if isRealUser() && resource.data.used_by == null && resource.data.expires_at > request.time
+        && changed(['used_by', 'used_at']) && d().used_by == me()
+        && getAfter(/databases/$(db)/documents/businesses/$(resource.data.business_id)/members/$(me())).data.role == 'staff';
+      allow delete: if isOwner(resource.data.business_id);
     }
 
+    // ---------- işletme ----------
     match /businesses/{b} {
       allow read: if true; // vitrin: ad, adres, kurallar (kişisel veri yok)
+      allow create: if isRealUser() && d().created_by == me() && isOwnerAfter(b)
+        && str(d().name, 80) && existsAfter(/databases/$(db)/documents/slugs/$(d().slug));
+      allow update: if isOwner(b) && changed(['name', 'description', 'phone', 'address', 'resource_label', 'booking_mode',
+          'slot_interval_min', 'min_notice_min', 'max_advance_days', 'cancel_until_min', 'max_active_per_customer',
+          'weekly_limit_per_customer', 'booking_note', 'is_active', 'slug'])
+        && str(d().name, 80)
+        && intIn(d().slot_interval_min, 5, 480) && d().slot_interval_min % 5 == 0
+        && intIn(d().min_notice_min, 0, 43200) && intIn(d().max_advance_days, 1, 365) && intIn(d().cancel_until_min, 0, 43200)
+        && (d().slug == resource.data.slug || getAfter(/databases/$(db)/documents/slugs/$(d().slug)).data.business_id == b);
 
       match /members/{uid} {
-        allow read: if isMember(b) || (signedIn() && request.auth.uid == uid);
-        allow update: if isOwner(b) && changed(['resource_id']);
-        allow delete: if isOwner(b) && resource.data.role != 'owner';
+        allow read: if isMember(b) || (signedIn() && me() == uid);
+        // Kurucu: işletmeyle aynı yazmada sahip olur
+        allow create: if isRealUser() && me() == uid && d().uid == uid && d().business_id == b && (
+          (d().role == 'owner' && !exists(bizPath(b)) && getAfter(bizPath(b)).data.created_by == me())
+          // Davetli: geçerli davetle ekip üyesi olur
+          || (d().role == 'staff' && getAfter(/databases/$(db)/documents/invites/$(d().invite_code)).data.used_by == me()
+              && get(/databases/$(db)/documents/invites/$(d().invite_code)).data.business_id == b)
+        );
+        allow update: if isOwner(b) && changed(['resource_id', 'full_name']);
+        allow delete: if (isOwner(b) && resource.data.role != 'owner') || (signedIn() && me() == uid && resource.data.role != 'owner');
       }
 
       match /resources/{r} {
         allow read: if true;
-        allow create, update: if isOwner(b)
-          && onlyKeys(['name', 'is_active', 'sort', 'hours'])
-          && strMax(request.resource.data.name, 60) && request.resource.data.name.size() > 0
-          && request.resource.data.is_active is bool
-          && request.resource.data.hours is list && request.resource.data.hours.size() <= 50;
-        // Silme yok: geçmiş randevular bozulmasın diye "pasif" yapılır
+        allow create, update: if isOwnerAfter(b) && onlyKeys(['name', 'is_active', 'sort', 'hours'])
+          && str(d().name, 60) && d().is_active is bool && d().hours is list && d().hours.size() <= 50;
       }
 
       match /services/{s} {
         allow read: if true;
-        allow create, update: if isOwner(b)
+        allow create, update: if isOwnerAfter(b)
           && onlyKeys(['name', 'description', 'duration_min', 'buffer_min', 'slot_interval_min', 'price_text', 'is_active', 'sort', 'resource_ids'])
-          && strMax(request.resource.data.name, 80) && request.resource.data.name.size() > 0
-          && optStr(request.resource.data.description, 300)
-          && optStr(request.resource.data.price_text, 40)
-          && intIn(request.resource.data.duration_min, 5, 1440)
-          && intIn(request.resource.data.buffer_min, 0, 240)
-          && (request.resource.data.slot_interval_min == null || intIn(request.resource.data.slot_interval_min, 5, 480))
-          && request.resource.data.is_active is bool
-          && request.resource.data.resource_ids is list;
+          && str(d().name, 80) && optStr(d().description, 300) && optStr(d().price_text, 40)
+          && intIn(d().duration_min, 5, 1440) && d().duration_min % 5 == 0
+          && intIn(d().buffer_min, 0, 240) && d().buffer_min % 5 == 0
+          && (d().slot_interval_min == null || (intIn(d().slot_interval_min, 5, 480) && d().slot_interval_min % 5 == 0))
+          && d().is_active is bool && d().resource_ids is list;
         allow delete: if isOwner(b);
       }
 
-      // Kapalı zamanlar: ekip görür ve yönetir (personel kendi iznini girebilsin)
+      // Kapalı zamanlar (tatil, izin): herkes görür (boş saat hesabı için), ekip yönetir
       match /timeOff/{t} {
-        allow read, delete: if isMember(b);
-        allow create: if isMember(b)
-          && onlyKeys(['resource_id', 'starts_at', 'ends_at', 'reason'])
-          && request.resource.data.starts_at is timestamp && request.resource.data.ends_at is timestamp
-          && request.resource.data.ends_at > request.resource.data.starts_at
-          && optStr(request.resource.data.reason, 120);
+        allow read: if true;
+        allow create: if isMember(b) && onlyKeys(['resource_id', 'starts_at', 'ends_at'])
+          && d().starts_at is timestamp && d().ends_at is timestamp && d().ends_at > d().starts_at;
+        allow delete: if isMember(b);
       }
 
-      // Müşteri kartları: sadece ekip. Doğrulanmış müşterinin telefonu değiştirilemez.
+      // Engellenen numaralar
+      match /blocked/{phone} {
+        allow read, write: if isMember(b);
+      }
+
+      // Müşteri kartları: ekip hepsini, müşteri sadece kendi kartını görür
       match /customers/{c} {
-        allow read: if isMember(b);
-        allow update: if isMember(b)
-          && changed(['name', 'note', 'is_blocked', 'phone'])
-          && strMax(request.resource.data.name, 80) && request.resource.data.name.size() > 0
-          && optStr(request.resource.data.note, 500)
-          && request.resource.data.is_blocked is bool
-          && (resource.data.user_id == null || request.resource.data.phone == resource.data.phone);
+        allow read: if isMember(b) || (signedIn() && c == me());
+        allow create: if signedIn() && str(d().name, 80) && optStr(d().phone, 20) && (
+          (c == me() && d().user_id == me() && d().is_blocked == false && d().note == null && onlyKeys(['user_id', 'name', 'phone', 'consent_at', 'is_blocked', 'note', 'created_at']))
+          || (isMember(b) && d().user_id == null));
+        allow update: if str(d().name, 80) && optStr(d().phone, 20) && (
+          (isMember(b) && changed(['name', 'note', 'is_blocked', 'phone']))
+          || (signedIn() && c == me() && changed(['name', 'phone', 'consent_at'])));
       }
 
-      // Randevular: sadece ekip okur; yazma yalnızca Cloud Functions ile
+      // Dolu dilimler: kişisel veri içermez, herkes okur (boş saat hesabı + anlık güncelleme)
+      match /cells/{cid} {
+        allow read: if true;
+        allow create: if signedIn() && onlyKeys(['business_id', 'resource_id', 'cell', 'booking_id'])
+          && d().business_id == b && cid == d().resource_id + '_' + string(d().cell)
+          && cellBelongs(b, d());
+        allow delete: if signedIn() && cellReleased(b, resource.data);
+      }
+      function bookingAfter(b, k) { return getAfter(/databases/$(db)/documents/businesses/$(b)/bookings/$(k)); }
+      function cellBelongs(b, c) {
+        let bk = bookingAfter(b, c.booking_id).data;
+        return bk.active == true && bk.resource_id == c.resource_id
+          && c.cell >= bk.cell_first && c.cell <= bk.cell_last
+          && (bk.customer_user_id == me() || isMember(b));
+      }
+      function cellReleased(b, c) {
+        let bk = bookingAfter(b, c.booking_id);
+        return (bk == null || bk.data.active == false || bk.data.resource_id != c.resource_id
+                || c.cell < bk.data.cell_first || c.cell > bk.data.cell_last)
+          && (bk.data.customer_user_id == me() || isMember(b));
+      }
+
+      // ---------- RANDEVULAR ----------
       match /bookings/{k} {
-        allow read: if isMember(b);
+        allow read: if isMember(b) || (signedIn() && resource.data.customer_user_id == me());
+        allow create: if validBooking(b) && (customerCreates(b) || staffCreates(b));
+        allow update: if customerCancels(b) || staffUpdates(b);
+      }
+      function cellPath(b, rid, n) { return /databases/$(db)/documents/businesses/$(b)/cells/$(rid + '_' + string(n)); }
+      // Aktif randevunun ilk ve son dilimi aynı yazmada kilitlenmiş olmalı
+      function cellsLocked(b, x) {
+        return x.active == false || (existsAfter(cellPath(b, x.resource_id, x.cell_first)) && existsAfter(cellPath(b, x.resource_id, x.cell_last)));
+      }
+      function validBooking(b) {
+        return d().business_id == b && d().ends_at is timestamp && d().ends_at > d().starts_at && d().block_until >= d().ends_at
+          && d().cell_first == cellOf(d().starts_at) && d().cell_last == lastCellOf(d().block_until)
+          && str(d().customer_name, 80) && optStr(d().customer_phone, 20) && optStr(d().customer_note, 500)
+          && cellsLocked(b, d());
+      }
+      function customerCreates(b) {
+        let biz = get(bizPath(b)).data;
+        let svc = get(/databases/$(db)/documents/businesses/$(b)/services/$(d().service_id)).data;
+        return signedIn() && d().source == 'customer' && d().customer_user_id == me() && d().customer_id == me()
+          && biz.is_active == true && d().active == true
+          && d().status == (biz.booking_mode == 'instant' ? 'confirmed' : 'pending')
+          && d().starts_at > request.time + minutes(biz.min_notice_min)
+          && d().starts_at < request.time + minutes(biz.max_advance_days * 1440)
+          && svc.is_active == true && d().service_name == svc.name
+          && d().ends_at == d().starts_at + minutes(svc.duration_min)
+          && d().block_until == d().ends_at + minutes(svc.buffer_min)
+          && !exists(/databases/$(db)/documents/businesses/$(b)/blocked/$(d().customer_phone))
+          && d().cancel_reason == null && d().cancelled_by == null;
+      }
+      function staffCreates(b) {
+        return isMember(b) && d().source == 'staff' && d().status == 'confirmed' && d().active == true;
+      }
+      function customerCancels(b) {
+        let biz = get(bizPath(b)).data;
+        return signedIn() && resource.data.customer_user_id == me() && resource.data.active == true
+          && changed(['status', 'active', 'cancel_reason', 'cancelled_by', 'updated_at'])
+          && d().status == 'cancelled' && d().active == false && d().cancelled_by == 'customer'
+          && optStr(d().cancel_reason, 300)
+          && (resource.data.status == 'pending' || request.time < resource.data.starts_at - minutes(biz.cancel_until_min));
+      }
+      function staffUpdates(b) {
+        return isMember(b) && d().source == resource.data.source && d().customer_user_id == resource.data.customer_user_id
+          && d().active == (d().status == 'pending' || d().status == 'confirmed')
+          && validBooking(b);
       }
     }
   }

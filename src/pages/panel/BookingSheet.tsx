@@ -58,7 +58,7 @@ export function BookingSheet({ booking, onClose, onChanged }: { booking: Booking
           <dl className="summary">
             <dt>Hizmet</dt><dd>{b.service_name}</dd>
             {resources.length > 1 ? <><dt>{biz.resource_label}</dt><dd>{resources.find((r) => r.id === b.resource_id)?.name}</dd></> : null}
-            <dt>Telefon</dt><dd>{phone ? displayPhone(phone) : '—'} {b.customer?.user_id ? <span className="badge badge-confirmed">doğrulanmış</span> : <span className="badge">elle eklendi</span>}</dd>
+            <dt>Telefon</dt><dd>{phone ? displayPhone(phone) : '—'} {b.source === 'staff' ? <span className="badge">elle eklendi</span> : <span className="badge">çevrim içi</span>}</dd>
             {b.customer_note ? <><dt>Müşteri notu</dt><dd>{b.customer_note}</dd></> : null}
             {b.cancel_reason ? <><dt>İptal sebebi</dt><dd>{b.cancel_reason} ({b.cancelled_by === 'customer' ? 'müşteri' : 'işletme'})</dd></> : null}
           </dl>
